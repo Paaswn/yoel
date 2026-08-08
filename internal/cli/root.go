@@ -4,10 +4,14 @@ import "github.com/spf13/cobra"
 
 // NewRootCommand creates the top-level command.
 func NewRootCommand() *cobra.Command {
-	return newRootCommand(readHiddenCredential)
+	return newRootCommandWithOpener(readHiddenCredential, openWithDefaultViewer)
 }
 
 func newRootCommand(prompt credentialPrompt) *cobra.Command {
+	return newRootCommandWithOpener(prompt, openWithDefaultViewer)
+}
+
+func newRootCommandWithOpener(prompt credentialPrompt, opener fileOpener) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "yoel",
 		Short:         "A command-line client for Cafe Grader",
@@ -19,6 +23,6 @@ func newRootCommand(prompt credentialPrompt) *cobra.Command {
 	}
 
 	root.AddCommand(newLoginCommand(prompt))
-	root.AddCommand(newQuestionCommand())
+	root.AddCommand(newQuestionCommand(opener))
 	return root
 }

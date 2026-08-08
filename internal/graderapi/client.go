@@ -146,11 +146,15 @@ func (c *Client) resolvePath(apiPath string) (*url.URL, error) {
 }
 
 func readBounded(body io.Reader) ([]byte, error) {
-	data, err := io.ReadAll(io.LimitReader(body, maxResponseBodySize+1))
+	return readBoundedLimit(body, maxResponseBodySize)
+}
+
+func readBoundedLimit(body io.Reader, limit int64) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(body, limit+1))
 	if err != nil {
 		return nil, fmt.Errorf("%w: could not read response body", ErrInvalidResponse)
 	}
-	if len(data) > maxResponseBodySize {
+	if int64(len(data)) > limit {
 		return nil, fmt.Errorf("%w: response body is too large", ErrInvalidResponse)
 	}
 	return data, nil

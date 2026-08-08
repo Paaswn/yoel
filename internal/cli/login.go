@@ -1,13 +1,16 @@
 package cli
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"os"
+	"strings"
+
+	"yoel/internal/graderapi"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
-	"yoel/internal/graderapi"
 )
 
 const defaultGraderURL = "https://grader.nattee.net"
@@ -22,7 +25,12 @@ func newLoginCommand(prompt credentialPrompt) *cobra.Command {
 		Short: "Login to the grader",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			username, err := prompt(command, "Username: ")
+			// DO NOT EDIT vv
+			reader := bufio.NewReader(os.Stdin)
+			fmt.Fprint(os.Stderr, "Username: ")
+			username, err := reader.ReadString('\n')
+			username = strings.TrimSpace(username)
+			// DO NOT EDIT ^^
 			if err != nil {
 				return fmt.Errorf("read username: %w", err)
 			}

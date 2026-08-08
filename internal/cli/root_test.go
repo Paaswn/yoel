@@ -180,6 +180,100 @@ func TestQuestionListCachesAndRefreshesProblems(t *testing.T) {
 	}
 }
 
+func TestQuestionShowResolvesDownloadsCachesAndRefreshesPDF(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	var downloads atomic.Int32
+	pdf := []byte("%PDF-1.7\nfirst version")
+	server := newCLITestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		downloads.Add(1)
+		if r.Method != http.MethodGet || r.URL.Path != "/problems/673/download/statement" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("Accept"); got != "application/pdf" {
+			t.Errorf("Accept = %q", got)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer fake-token" {
+			t.Errorf("Authorization = %q", got)
+		}
+		_, _ = w.Write(pdf)
+	}))
+	defer server.Close()
+
+	session := storedSession{
+		BaseURL:   server.URL,
+		Token:     "fake-token",
+		ExpiresAt: time.Now().Add(time.Hour),
+		User:      graderapi.User{ID: 7, Login: "fake-login", FullName: "Fake Student"},
+	}
+	if err := saveSession(session); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveQuestionCache(questionCache{
+		BaseURL:   server.URL,
+		UserID:    7,
+		FetchedAt: time.Now(),
+		Problems:  []graderapi.Problem{{ID: 673, Name: "arrays"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var openedPaths []string
+	opener := func(path string) error {
+		openedPaths = append(openedPaths, path)
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(contents, pdf) {
+			return fmt.Errorf("opened PDF = %q", contents)
+		}
+		return nil
+	}
+
+	executeQuestionShow(t, opener, "--name", "ArRaYs")
+	if got := downloads.Load(); got != 1 {
+		t.Fatalf("downloads after first show = %d, want 1", got)
+	}
+	if len(openedPaths) != 1 || filepath.Ext(openedPaths[0]) != ".pdf" {
+		t.Fatalf("opened paths = %#v", openedPaths)
+	}
+
+	session.ExpiresAt = time.Now().Add(-time.Minute)
+	if err := saveSession(session); err != nil {
+		t.Fatal(err)
+	}
+	executeQuestionShow(t, opener, "673")
+	if got := downloads.Load(); got != 1 {
+		t.Fatalf("cached show downloaded again; count = %d", got)
+	}
+
+	session.ExpiresAt = time.Now().Add(time.Hour)
+	if err := saveSession(session); err != nil {
+		t.Fatal(err)
+	}
+	pdf = []byte("%PDF-1.7\nsecond version")
+	executeQuestionShow(t, opener, "673", "--refresh")
+	if got := downloads.Load(); got != 2 {
+		t.Fatalf("downloads after refresh = %d, want 2", got)
+	}
+}
+
+func executeQuestionShow(t *testing.T, opener fileOpener, args ...string) {
+	t.Helper()
+	command := newRootCommandWithOpener(func(_ *cobra.Command, _ string) (string, error) {
+		t.Fatal("question show unexpectedly prompted for credentials")
+		return "", nil
+	}, opener)
+	command.SetOut(new(bytes.Buffer))
+	command.SetErr(new(bytes.Buffer))
+	command.SetArgs(append([]string{"question", "show"}, args...))
+	if err := command.Execute(); err != nil {
+		t.Fatalf("question show: %v", err)
+	}
+}
+
 func executeQuestionList(t *testing.T) string {
 	t.Helper()
 	command := newRootCommand(func(_ *cobra.Command, _ string) (string, error) {

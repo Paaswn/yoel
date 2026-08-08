@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,6 +45,17 @@ func saveSession(session storedSession) error {
 }
 
 func loadSession(now time.Time) (storedSession, error) {
+	session, err := loadStoredSession()
+	if err != nil {
+		return storedSession{}, err
+	}
+	if !now.Before(session.ExpiresAt) {
+		return storedSession{}, errors.New("saved session expired; run yoel login")
+	}
+	return session, nil
+}
+
+func loadStoredSession() (storedSession, error) {
 	path, err := sessionPath()
 	if err != nil {
 		return storedSession{}, err
@@ -57,9 +69,6 @@ func loadSession(now time.Time) (storedSession, error) {
 	}
 	if session.BaseURL == "" || session.Token == "" || session.ExpiresAt.IsZero() {
 		return storedSession{}, errors.New("saved session is invalid; run yoel login")
-	}
-	if !now.Before(session.ExpiresAt) {
-		return storedSession{}, errors.New("saved session expired; run yoel login")
 	}
 	return session, nil
 }
@@ -100,6 +109,18 @@ func questionCachePath() (string, error) {
 	return filepath.Join(dir, applicationDir, questionsFilename), nil
 }
 
+func statementPDFPath(baseURL string, userID, problemID int) (string, error) {
+	if baseURL == "" || userID <= 0 || problemID <= 0 {
+		return "", errors.New("invalid statement cache key")
+	}
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("find user cache directory: %w", err)
+	}
+	serverKey := fmt.Sprintf("%x", sha256.Sum256([]byte(baseURL)))
+	return filepath.Join(dir, applicationDir, "statements", serverKey, fmt.Sprintf("user-%d", userID), fmt.Sprintf("%d.pdf", problemID)), nil
+}
+
 func readJSON(path string, target any) error {
 	file, err := os.Open(path)
 	if err != nil {
@@ -114,6 +135,15 @@ func readJSON(path string, target any) error {
 }
 
 func writePrivateJSON(path string, value any) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return writePrivateFile(path, data)
+}
+
+func writePrivateFile(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -132,10 +162,10 @@ func writePrivateJSON(path string, value any) error {
 		file.Close()
 		return err
 	}
-	encodeErr := json.NewEncoder(file).Encode(value)
+	_, writeErr := file.Write(data)
 	closeErr := file.Close()
-	if encodeErr != nil {
-		return encodeErr
+	if writeErr != nil {
+		return writeErr
 	}
 	if closeErr != nil {
 		return closeErr
