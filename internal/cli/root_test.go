@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestNewRootCommandShowsHelpWithoutSubcommands(t *testing.T) {
@@ -35,6 +37,11 @@ func TestNewRootCommandIncludesLoginCommand(t *testing.T) {
 	if login.Use != "login" {
 		t.Fatalf("login.Use = %q, want %q", login.Use, "login")
 	}
+	for _, name := range []string{"login", "username", "password"} {
+		if login.Flags().Lookup(name) != nil {
+			t.Fatalf("login command exposes credential flag --%s", name)
+		}
+	}
 }
 
 func TestLoginCommandCallsGraderAPI(t *testing.T) {
@@ -46,22 +53,28 @@ func TestLoginCommandCallsGraderAPI(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Errorf("decode request: %v", err)
 		}
-		if request["login"] != "fake-login" || request["password"] != "fake-password" {
+		if request["login"] != "fake-username" || request["password"] != "fake-password" {
 			t.Errorf("request body = %#v", request)
 		}
 		_, _ = w.Write([]byte(`{"token":"fake-token","expires_at":"2030-01-02T03:04:05Z","user":{"id":7,"login":"fake-login","full_name":"Fake Student"}}`))
 	}))
 	defer server.Close()
 
-	command := NewRootCommand()
+	credentials := []string{"fake-username", "fake-password"}
+	var labels []string
+	promptIndex := 0
+	command := newRootCommand(func(_ *cobra.Command, label string) (string, error) {
+		labels = append(labels, label)
+		credential := credentials[promptIndex]
+		promptIndex++
+		return credential, nil
+	})
 	output := new(bytes.Buffer)
 	command.SetOut(output)
 	command.SetErr(output)
 	command.SetArgs([]string{
 		"login",
 		"--base-url", server.URL,
-		"--login", "fake-login",
-		"--password", "fake-password",
 	})
 
 	if err := command.Execute(); err != nil {
@@ -72,6 +85,12 @@ func TestLoginCommandCallsGraderAPI(t *testing.T) {
 	}
 	if bytes.Contains(output.Bytes(), []byte("fake-token")) {
 		t.Fatal("output contains the bearer token")
+	}
+	if bytes.Contains(output.Bytes(), []byte("fake-username")) || bytes.Contains(output.Bytes(), []byte("fake-password")) {
+		t.Fatal("output contains credentials")
+	}
+	if len(labels) != 2 || labels[0] != "Username: " || labels[1] != "Password: " {
+		t.Fatalf("prompt labels = %#v", labels)
 	}
 }
 

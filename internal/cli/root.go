@@ -1,18 +1,25 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 	"yoel/internal/graderapi"
 )
 
 const defaultGraderURL = "https://grader.nattee.net"
 
-// NewRootCommand creates the top-level command. Login behavior, credentials,
-// token storage, and output remain intentionally unimplemented for the owner
-// to define.
+type credentialPrompt func(command *cobra.Command, label string) (string, error)
+
+// NewRootCommand creates the top-level command.
 func NewRootCommand() *cobra.Command {
+	return newRootCommand(readHiddenCredential)
+}
+
+func newRootCommand(prompt credentialPrompt) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "yoel",
 		Short:         "A command-line client for Cafe Grader",
@@ -23,26 +30,33 @@ func NewRootCommand() *cobra.Command {
 		},
 	}
 
-	initSubCommand(root)
+	initSubCommand(root, prompt)
 
 	return root
 }
 
-func initSubCommand(root *cobra.Command) {
+func initSubCommand(root *cobra.Command, prompt credentialPrompt) {
 	var baseURL string
-	var login string
-	var password string
 
 	loginCmd := &cobra.Command{
 		Use:   "login",
 		Short: "Login to the grader",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
+			username, err := prompt(command, "Username: ")
+			if err != nil {
+				return fmt.Errorf("read username: %w", err)
+			}
+			password, err := prompt(command, "Password: ")
+			if err != nil {
+				return fmt.Errorf("read password: %w", err)
+			}
+
 			client, err := graderapi.NewClient(baseURL, nil)
 			if err != nil {
 				return fmt.Errorf("login command: %w", err)
 			}
-			if _, err := client.Login(command.Context(), login, password); err != nil {
+			if _, err := client.Login(command.Context(), username, password); err != nil {
 				return err
 			}
 			_, err = fmt.Fprintln(command.OutOrStdout(), "login successful")
@@ -50,9 +64,24 @@ func initSubCommand(root *cobra.Command) {
 		},
 	}
 	loginCmd.Flags().StringVar(&baseURL, "base-url", defaultGraderURL, "grader API base URL")
-	loginCmd.Flags().StringVar(&login, "login", "", "grader login")
-	loginCmd.Flags().StringVar(&password, "password", "", "grader password")
-	_ = loginCmd.MarkFlagRequired("login")
-	_ = loginCmd.MarkFlagRequired("password")
 	root.AddCommand(loginCmd)
+}
+
+func readHiddenCredential(command *cobra.Command, label string) (string, error) {
+	input, ok := command.InOrStdin().(*os.File)
+	if !ok || !term.IsTerminal(int(input.Fd())) {
+		return "", errors.New("an interactive terminal is required")
+	}
+	if _, err := fmt.Fprint(command.ErrOrStderr(), label); err != nil {
+		return "", err
+	}
+	value, err := term.ReadPassword(int(input.Fd()))
+	_, newlineErr := fmt.Fprintln(command.ErrOrStderr())
+	if err != nil {
+		return "", err
+	}
+	if newlineErr != nil {
+		return "", newlineErr
+	}
+	return string(value), nil
 }

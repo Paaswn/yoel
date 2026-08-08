@@ -24,16 +24,16 @@ type User struct {
 	FullName string `json:"full_name"`
 }
 
-func (c *Client) Login(ctx context.Context, login, password string) (Session, error) {
-	if strings.TrimSpace(login) == "" || password == "" {
-		return Session{}, fmt.Errorf("login: %w: login and password are required", ErrInvalidInput)
+func (c *Client) Login(ctx context.Context, username, password string) (Session, error) {
+	if strings.TrimSpace(username) == "" || password == "" {
+		return Session{}, fmt.Errorf("login: %w: username and password are required", ErrInvalidInput)
 	}
 
 	payload := struct {
 		Login    string `json:"login"`
 		Password string `json:"password"`
 	}{
-		Login:    login,
+		Login:    username,
 		Password: password,
 	}
 	body, err := json.Marshal(payload)
