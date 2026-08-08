@@ -26,8 +26,8 @@ func newLoginCommand(prompt credentialPrompt) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			// DO NOT EDIT vv
-			reader := bufio.NewReader(os.Stdin)
-			fmt.Fprint(os.Stderr, "Username: ")
+			reader := bufio.NewReader(command.InOrStdin())
+			fmt.Fprint(command.ErrOrStderr(), "Username: ")
 			username, err := reader.ReadString('\n')
 			username = strings.TrimSpace(username)
 			// DO NOT EDIT ^^

@@ -12,8 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
 	"yoel/internal/graderapi"
+
+	"github.com/spf13/cobra"
 )
 
 type fileOpener func(path string) error
@@ -29,6 +30,7 @@ func newQuestionCommand(opener fileOpener) *cobra.Command {
 	}
 	question.AddCommand(newQuestionListCommand())
 	question.AddCommand(newQuestionShowCommand(opener))
+	question.AddCommand(newQuestionNewCommand(opener))
 	return question
 }
 
@@ -62,46 +64,91 @@ func newQuestionShowCommand(opener fileOpener) *cobra.Command {
 		Short: "Open a question statement PDF",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			if (len(args) == 0) == (name == "") {
-				return errors.New("provide either a question id or --name")
-			}
-			session, err := loadStoredSession()
-			if err != nil {
-				return err
-			}
-
-			problemID, err := resolveQuestionID(command.Context(), session, args, name, refresh)
-			if err != nil {
-				return err
-			}
-			path, err := statementPDFPath(session.BaseURL, session.User.ID, problemID)
-			if err != nil {
-				return err
-			}
-			if !refresh && validCachedPDF(path) {
-				return opener(path)
-			}
-			if !time.Now().Before(session.ExpiresAt) {
-				return errors.New("saved session expired; run yoel login")
-			}
-
-			client, err := graderapi.NewClient(session.BaseURL, nil)
-			if err != nil {
-				return fmt.Errorf("question show: %w", err)
-			}
-			pdf, err := client.WithToken(session.Token).GetProblemStatementPDF(command.Context(), problemID)
-			if err != nil {
-				return err
-			}
-			if err := writePrivateFile(path, pdf); err != nil {
-				return fmt.Errorf("cache statement PDF: %w", err)
-			}
-			return opener(path)
+			return showQuestionPDF(command.Context(), opener, args, name, refresh)
 		},
 	}
 	command.Flags().StringVar(&name, "name", "", "question name")
 	command.Flags().BoolVar(&refresh, "refresh", false, "download the statement again")
 	return command
+}
+
+func newQuestionNewCommand(opener fileOpener) *cobra.Command {
+	var lang string
+	newCmd := &cobra.Command{
+		Use:   "new [id]",
+		Short: "New file based on flag --language, defualt to .cpp",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(command *cobra.Command, args []string) error {
+			err := showQuestionPDF(command.Context(), opener, args, "", false)
+			if err != nil {
+				return errors.New("question may not exist")
+			}
+			calleDir, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("find current directory: %w", err)
+			}
+
+			if lang == "" {
+				lang = "cpp"
+			}
+
+			name := strings.Join([]string{args[0], lang}, ".")
+			filePath := filepath.Join(calleDir, name)
+			file, err := os.Create(filePath)
+			if err != nil {
+				return fmt.Errorf("create source file: %w", err)
+			}
+			if _, err := file.WriteString("// --- Automatically Created by yoel ---\n"); err != nil {
+				file.Close()
+				return fmt.Errorf("write source file: %w", err)
+			}
+			if err := file.Close(); err != nil {
+				return fmt.Errorf("close source file: %w", err)
+			}
+
+			return nil
+		},
+	}
+	newCmd.Flags().StringVar(&lang, "language", "", "language of choice")
+	return newCmd
+}
+
+func showQuestionPDF(ctx context.Context, opener fileOpener, args []string, name string, refresh bool) error {
+	if (len(args) == 0) == (name == "") {
+		return errors.New("provide either a question id or --name")
+	}
+	session, err := loadStoredSession()
+	if err != nil {
+		return err
+	}
+
+	problemID, err := resolveQuestionID(ctx, session, args, name, refresh)
+	if err != nil {
+		return err
+	}
+	path, err := statementPDFPath(session.BaseURL, session.User.ID, problemID)
+	if err != nil {
+		return err
+	}
+	if !refresh && validCachedPDF(path) {
+		return opener(path)
+	}
+	if !time.Now().Before(session.ExpiresAt) {
+		return errors.New("saved session expired; run yoel login")
+	}
+
+	client, err := graderapi.NewClient(session.BaseURL, nil)
+	if err != nil {
+		return fmt.Errorf("question show: %w", err)
+	}
+	problemFile, err := client.WithToken(session.Token).DownloadProblemPDF(ctx, problemID)
+	if err != nil {
+		return err
+	}
+	if err := writePrivateFile(path, problemFile.Data); err != nil {
+		return fmt.Errorf("cache statement PDF: %w", err)
+	}
+	return opener(path)
 }
 
 func getQuestions(ctx context.Context, session storedSession, refresh bool, now time.Time) ([]graderapi.Problem, error) {
@@ -209,7 +256,7 @@ func openWithDefaultViewer(path string) error {
 	default:
 		command = exec.Command("xdg-open", path)
 	}
-	if err := command.Run(); err != nil {
+	if err := command.Start(); err != nil {
 		return fmt.Errorf("open PDF with default viewer: %w", err)
 	}
 	return nil

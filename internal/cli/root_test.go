@@ -9,12 +9,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/spf13/cobra"
 	"yoel/internal/graderapi"
+
+	"github.com/spf13/cobra"
 )
 
 func TestNewRootCommandShowsHelpWithoutSubcommands(t *testing.T) {
@@ -70,7 +72,7 @@ func TestLoginCommandCallsGraderAPI(t *testing.T) {
 	}))
 	defer server.Close()
 
-	credentials := []string{"fake-username", "fake-password"}
+	credentials := []string{"fake-password"}
 	var labels []string
 	promptIndex := 0
 	command := newRootCommand(func(_ *cobra.Command, label string) (string, error) {
@@ -79,9 +81,11 @@ func TestLoginCommandCallsGraderAPI(t *testing.T) {
 		promptIndex++
 		return credential, nil
 	})
-	output := new(bytes.Buffer)
-	command.SetOut(output)
-	command.SetErr(output)
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	command.SetIn(strings.NewReader("fake-username\n"))
+	command.SetOut(stdout)
+	command.SetErr(stderr)
 	command.SetArgs([]string{
 		"login",
 		"--base-url", server.URL,
@@ -90,16 +94,19 @@ func TestLoginCommandCallsGraderAPI(t *testing.T) {
 	if err := command.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if got := output.String(); got != "login successful\n" {
+	if got := stdout.String(); got != "login successful\n" {
 		t.Fatalf("output = %q", got)
 	}
-	if bytes.Contains(output.Bytes(), []byte("fake-token")) {
+	if stderr.String() != "Username: " {
+	    t.Fatalf("stderr = %q", stderr.String())
+	}
+	if bytes.Contains(stdout.Bytes(), []byte("fake-token")) {
 		t.Fatal("output contains the bearer token")
 	}
-	if bytes.Contains(output.Bytes(), []byte("fake-username")) || bytes.Contains(output.Bytes(), []byte("fake-password")) {
+	if bytes.Contains(stdout.Bytes(), []byte("fake-username")) || bytes.Contains(stdout.Bytes(), []byte("fake-password")) {
 		t.Fatal("output contains credentials")
 	}
-	if len(labels) != 2 || labels[0] != "Username: " || labels[1] != "Password: " {
+	if len(labels) != 1 || labels[0] != "Password: " {
 		t.Fatalf("prompt labels = %#v", labels)
 	}
 	session, err := loadSession(time.Now())
@@ -188,7 +195,7 @@ func TestQuestionShowResolvesDownloadsCachesAndRefreshesPDF(t *testing.T) {
 	pdf := []byte("%PDF-1.7\nfirst version")
 	server := newCLITestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		downloads.Add(1)
-		if r.Method != http.MethodGet || r.URL.Path != "/problems/673/download/statement" {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/problems/673/files/pdf" {
 			t.Errorf("request = %s %s", r.Method, r.URL.Path)
 		}
 		if got := r.Header.Get("Accept"); got != "application/pdf" {
@@ -197,6 +204,8 @@ func TestQuestionShowResolvesDownloadsCachesAndRefreshesPDF(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer fake-token" {
 			t.Errorf("Authorization = %q", got)
 		}
+		w.Header().Set("Content-Disposition", `attachment; filename="server-name.pdf"`)
+		w.Header().Set("Content-Type", "application/pdf")
 		_, _ = w.Write(pdf)
 	}))
 	defer server.Close()
@@ -257,6 +266,73 @@ func TestQuestionShowResolvesDownloadsCachesAndRefreshesPDF(t *testing.T) {
 	executeQuestionShow(t, opener, "673", "--refresh")
 	if got := downloads.Load(); got != 2 {
 		t.Fatalf("downloads after refresh = %d, want 2", got)
+	}
+}
+
+func TestQuestionNewCreatesSourceAndOpensPDF(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	workingDirectory := t.TempDir()
+	t.Chdir(workingDirectory)
+
+	pdf := []byte("%PDF-1.7\nnew question statement")
+	server := newCLITestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/problems/673/files/pdf" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("Accept"); got != "application/pdf" {
+			t.Errorf("Accept = %q", got)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer fake-token" {
+			t.Errorf("Authorization = %q", got)
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		_, _ = w.Write(pdf)
+	}))
+	defer server.Close()
+
+	if err := saveSession(storedSession{
+		BaseURL:   server.URL,
+		Token:     "fake-token",
+		ExpiresAt: time.Now().Add(time.Hour),
+		User:      graderapi.User{ID: 7, Login: "fake-login", FullName: "Fake Student"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var openedPath string
+	opener := func(path string) error {
+		openedPath = path
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(contents, pdf) {
+			return fmt.Errorf("opened PDF = %q", contents)
+		}
+		return nil
+	}
+
+	command := newRootCommandWithOpener(func(_ *cobra.Command, _ string) (string, error) {
+		t.Fatal("question new unexpectedly prompted for credentials")
+		return "", nil
+	}, opener)
+	command.SetOut(new(bytes.Buffer))
+	command.SetErr(new(bytes.Buffer))
+	command.SetArgs([]string{"question", "new", "673"})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("question new: %v", err)
+	}
+
+	source, err := os.ReadFile(filepath.Join(workingDirectory, "673.cpp"))
+	if err != nil {
+		t.Fatalf("read created source file: %v", err)
+	}
+	if got, want := string(source), "// --- Automatically Created by yoel ---\n"; got != want {
+		t.Fatalf("created source = %q, want %q", got, want)
+	}
+	if openedPath == "" || filepath.Ext(openedPath) != ".pdf" {
+		t.Fatalf("opened path = %q, want cached PDF path", openedPath)
 	}
 }
 
