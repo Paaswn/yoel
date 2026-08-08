@@ -20,6 +20,7 @@ Create a focused, reviewable commit for completed work. Treat the installed skil
 9. Create one commit with a concise imperative subject that describes the outcome and follows the repository's recent convention. Add a body only when it explains important reasoning or tradeoffs. Do not amend, squash, rebase, force, or bypass hooks unless explicitly requested.
 10. If a commit hook fails or modifies files, inspect the result, rerun relevant checks, and retry only when the resulting patch still belongs to the task.
 11. Verify the result with `git status --short` and `git log -1 --oneline`. Report the commit hash and subject, plus any remaining uncommitted paths.
+12. Add a commit description that "Codex submitted this"
 
 ## Boundaries
 
