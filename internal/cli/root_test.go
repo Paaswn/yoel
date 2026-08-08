@@ -98,7 +98,7 @@ func TestLoginCommandCallsGraderAPI(t *testing.T) {
 		t.Fatalf("output = %q", got)
 	}
 	if stderr.String() != "Username: " {
-	    t.Fatalf("stderr = %q", stderr.String())
+		t.Fatalf("stderr = %q", stderr.String())
 	}
 	if bytes.Contains(stdout.Bytes(), []byte("fake-token")) {
 		t.Fatal("output contains the bearer token")
@@ -336,6 +336,121 @@ func TestQuestionNewCreatesSourceAndOpensPDF(t *testing.T) {
 	}
 }
 
+func TestUserCommandShowsActivityWithoutExposingToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	latestSubmission := time.Date(2030, time.January, 2, 10, 30, 0, 0, time.UTC)
+	expiresAt := time.Now().Add(time.Hour).Round(time.Second)
+	server := newCLITestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/problems" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("Accept"); got != "application/json" {
+			t.Errorf("Accept = %q", got)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer fake-user-token" {
+			t.Errorf("Authorization = %q", got)
+		}
+		_, _ = fmt.Fprintf(w, `[
+			{"id":1,"name":"one","full_name":"One","submission_count":2,"last_submission_time":"2029-12-01T01:00:00Z"},
+			{"id":2,"name":"two","full_name":"Two","submission_count":0,"last_submission_time":null},
+			{"id":3,"name":"three","full_name":"Three","submission_count":3,"last_submission_time":%q}
+		]`, latestSubmission.Format(time.RFC3339))
+	}))
+	defer server.Close()
+
+	if err := saveSession(storedSession{
+		BaseURL:   server.URL,
+		Token:     "fake-user-token",
+		ExpiresAt: expiresAt,
+		User:      graderapi.User{ID: 7, Login: "fake-login", FullName: "Fake Student"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	output := executeUserCommand(t)
+	for _, expected := range []string{
+		"Username:            fake-login\n",
+		"Full name:           Fake Student\n",
+		"Last submission:     " + latestSubmission.Local().Format(userTimeFormat) + "\n",
+		"Problems attempted:  2\n",
+		"Total submissions:   5\n",
+		"Token expires:       " + expiresAt.Local().Format(userTimeFormat) + "\n",
+		"Token status:        unexpired\n",
+		"Cookie status:       not used\n",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Errorf("output %q does not contain %q", output, expected)
+		}
+	}
+	if strings.Contains(output, "fake-user-token") {
+		t.Fatal("output contains bearer token")
+	}
+}
+
+func TestUserCommandReportsExpiredTokenWithoutRequest(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	server := newCLITestServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("expired user command unexpectedly contacted grader")
+	}))
+	defer server.Close()
+
+	if err := saveSession(storedSession{
+		BaseURL:   server.URL,
+		Token:     "fake-expired-token",
+		ExpiresAt: time.Now().Add(-time.Hour),
+		User:      graderapi.User{ID: 7, Login: "fake-login", FullName: "Fake Student"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	output := executeUserCommand(t)
+	for _, expected := range []string{
+		"Last submission:     unavailable\n",
+		"Problems attempted:  unavailable\n",
+		"Total submissions:   unavailable\n",
+		"Token status:        expired\n",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Errorf("output %q does not contain %q", output, expected)
+		}
+	}
+	if strings.Contains(output, "fake-expired-token") {
+		t.Fatal("output contains expired bearer token")
+	}
+}
+
+func TestUserCommandReportsRejectedToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	server := newCLITestServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = fmt.Fprintln(w, "fake-rejected-token")
+	}))
+	defer server.Close()
+
+	if err := saveSession(storedSession{
+		BaseURL:   server.URL,
+		Token:     "fake-rejected-token",
+		ExpiresAt: time.Now().Add(time.Hour),
+		User:      graderapi.User{ID: 7, Login: "fake-login", FullName: "Fake Student"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	output := executeUserCommand(t)
+	if !strings.Contains(output, "Token status:        rejected\n") {
+		t.Fatalf("output = %q, want rejected token status", output)
+	}
+	if strings.Contains(output, "fake-rejected-token") {
+		t.Fatal("output contains rejected bearer token")
+	}
+}
+
 func executeQuestionShow(t *testing.T, opener fileOpener, args ...string) {
 	t.Helper()
 	command := newRootCommandWithOpener(func(_ *cobra.Command, _ string) (string, error) {
@@ -362,6 +477,22 @@ func executeQuestionList(t *testing.T) string {
 	command.SetArgs([]string{"question", "list"})
 	if err := command.Execute(); err != nil {
 		t.Fatalf("question list: %v", err)
+	}
+	return output.String()
+}
+
+func executeUserCommand(t *testing.T) string {
+	t.Helper()
+	command := newRootCommand(func(_ *cobra.Command, _ string) (string, error) {
+		t.Fatal("user command unexpectedly prompted for credentials")
+		return "", nil
+	})
+	output := new(bytes.Buffer)
+	command.SetOut(output)
+	command.SetErr(new(bytes.Buffer))
+	command.SetArgs([]string{"user"})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("user command: %v", err)
 	}
 	return output.String()
 }

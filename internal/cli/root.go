@@ -24,5 +24,6 @@ func newRootCommandWithOpener(prompt credentialPrompt, opener fileOpener) *cobra
 
 	root.AddCommand(newLoginCommand(prompt))
 	root.AddCommand(newQuestionCommand(opener))
+	root.AddCommand(newUserCommand())
 	return root
 }
