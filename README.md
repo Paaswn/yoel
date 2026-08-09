@@ -2,7 +2,7 @@
 
 Yoel is a cli client for [Chula's Computer Engineering Grader](https://grader.nattee.net/) written in Go. It is one of my learning project along with my [Falling sand simulation](https://github.com/Paaswn/sandfall-sim). The only difference is that, I token-maxxing Yoel.
 
-## Backstory you must have to use this cli
+## Backstory you must have before using this cli
 If you are a person who hate copying your source code, paste it to the browser, then come back to the IDE over and over like me, Yoel is for you. Yoel make querying, writing, and submitting grader's question a piece of cake. The only requirement is access to the grader site.
 
 ## Build
