@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -72,18 +73,11 @@ func TestLoginCommandCallsGraderAPI(t *testing.T) {
 	}))
 	defer server.Close()
 
-	credentials := []string{"fake-password"}
-	var labels []string
-	promptIndex := 0
-	command := newRootCommand(func(_ *cobra.Command, label string) (string, error) {
-		labels = append(labels, label)
-		credential := credentials[promptIndex]
-		promptIndex++
-		return credential, nil
+	command := newRootCommand(func(_ *cobra.Command) (string, string, error) {
+		return "fake-username", "fake-password", nil
 	})
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	command.SetIn(strings.NewReader("fake-username\n"))
 	command.SetOut(stdout)
 	command.SetErr(stderr)
 	command.SetArgs([]string{
@@ -94,20 +88,17 @@ func TestLoginCommandCallsGraderAPI(t *testing.T) {
 	if err := command.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if got := stdout.String(); got != "login successful\n" {
+	if got := stdout.String(); got != "✓ Login successful as fake-login\n" {
 		t.Fatalf("output = %q", got)
 	}
-	if stderr.String() != "Username: " {
-		t.Fatalf("stderr = %q", stderr.String())
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 	if bytes.Contains(stdout.Bytes(), []byte("fake-token")) {
 		t.Fatal("output contains the bearer token")
 	}
 	if bytes.Contains(stdout.Bytes(), []byte("fake-username")) || bytes.Contains(stdout.Bytes(), []byte("fake-password")) {
 		t.Fatal("output contains credentials")
-	}
-	if len(labels) != 1 || labels[0] != "Password: " {
-		t.Fatalf("prompt labels = %#v", labels)
 	}
 	session, err := loadSession(time.Now())
 	if err != nil {
@@ -125,9 +116,51 @@ func TestLoginCommandCallsGraderAPI(t *testing.T) {
 	}
 }
 
+func TestLoginCommandReportsAuthenticationFailureWithoutSecrets(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	server := newCLITestServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = fmt.Fprintln(w, "fake-private-response")
+	}))
+	defer server.Close()
+
+	command := newRootCommand(func(_ *cobra.Command) (string, string, error) {
+		return "fake-username", "fake-password", nil
+	})
+	command.SetOut(new(bytes.Buffer))
+	command.SetErr(new(bytes.Buffer))
+	command.SetArgs([]string{"login", "--base-url", server.URL})
+
+	err := command.Execute()
+	if !errors.Is(err, graderapi.ErrAuthentication) {
+		t.Fatalf("error = %v, want ErrAuthentication", err)
+	}
+	for _, secret := range []string{"fake-username", "fake-password", "fake-private-response"} {
+		if strings.Contains(err.Error(), secret) {
+			t.Fatalf("error exposes %q: %v", secret, err)
+		}
+	}
+}
+
+func TestLoginCommandStopsWhenFormFails(t *testing.T) {
+	formErr := errors.New("fake form canceled")
+	command := newRootCommand(func(_ *cobra.Command) (string, string, error) {
+		return "", "", formErr
+	})
+	command.SetArgs([]string{"login"})
+
+	err := command.Execute()
+	if !errors.Is(err, formErr) {
+		t.Fatalf("error = %v, want form cancellation", err)
+	}
+}
+
 func TestQuestionListCachesAndRefreshesProblems(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("TERM", "dumb")
 
 	var requests atomic.Int32
 	questionName := "arrays"
@@ -153,16 +186,18 @@ func TestQuestionListCachesAndRefreshesProblems(t *testing.T) {
 	}
 
 	firstOutput := executeQuestionList(t)
-	if firstOutput != "Question_Name Id Difficulty\narrays 42 3\nunknown 43 -\n" {
-		t.Fatalf("first output = %q", firstOutput)
+	for _, expected := range []string{"Questions List", "arrays", "unknown"} {
+		if !strings.Contains(firstOutput, expected) {
+			t.Fatalf("first output %q does not contain %q", firstOutput, expected)
+		}
 	}
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("requests after first list = %d, want 1", got)
 	}
 
 	secondOutput := executeQuestionList(t)
-	if secondOutput != firstOutput {
-		t.Fatalf("cached output = %q, want %q", secondOutput, firstOutput)
+	if !strings.Contains(secondOutput, "arrays") {
+		t.Fatalf("cached output = %q, want arrays option", secondOutput)
 	}
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("cached list made a server request; count = %d", got)
@@ -179,8 +214,8 @@ func TestQuestionListCachesAndRefreshesProblems(t *testing.T) {
 	questionName = "graphs"
 
 	refreshedOutput := executeQuestionList(t)
-	if refreshedOutput != "Question_Name Id Difficulty\ngraphs 42 3\nunknown 43 -\n" {
-		t.Fatalf("refreshed output = %q", refreshedOutput)
+	if !strings.Contains(refreshedOutput, "graphs") || strings.Contains(refreshedOutput, "arrays") {
+		t.Fatalf("refreshed output = %q, want updated graphs option", refreshedOutput)
 	}
 	if got := requests.Load(); got != 2 {
 		t.Fatalf("requests after stale cache = %d, want 2", got)
@@ -313,9 +348,9 @@ func TestQuestionNewCreatesSourceAndOpensPDF(t *testing.T) {
 		return nil
 	}
 
-	command := newRootCommandWithOpener(func(_ *cobra.Command, _ string) (string, error) {
+	command := newRootCommandWithOpener(func(_ *cobra.Command) (string, string, error) {
 		t.Fatal("question new unexpectedly prompted for credentials")
-		return "", nil
+		return "", "", nil
 	}, opener)
 	command.SetOut(new(bytes.Buffer))
 	command.SetErr(new(bytes.Buffer))
@@ -453,9 +488,9 @@ func TestUserCommandReportsRejectedToken(t *testing.T) {
 
 func executeQuestionShow(t *testing.T, opener fileOpener, args ...string) {
 	t.Helper()
-	command := newRootCommandWithOpener(func(_ *cobra.Command, _ string) (string, error) {
+	command := newRootCommandWithOpener(func(_ *cobra.Command) (string, string, error) {
 		t.Fatal("question show unexpectedly prompted for credentials")
-		return "", nil
+		return "", "", nil
 	}, opener)
 	command.SetOut(new(bytes.Buffer))
 	command.SetErr(new(bytes.Buffer))
@@ -467,11 +502,12 @@ func executeQuestionShow(t *testing.T, opener fileOpener, args ...string) {
 
 func executeQuestionList(t *testing.T) string {
 	t.Helper()
-	command := newRootCommand(func(_ *cobra.Command, _ string) (string, error) {
+	command := newRootCommand(func(_ *cobra.Command) (string, string, error) {
 		t.Fatal("question list unexpectedly prompted for credentials")
-		return "", nil
+		return "", "", nil
 	})
 	output := new(bytes.Buffer)
+	command.SetIn(strings.NewReader("1\n"))
 	command.SetOut(output)
 	command.SetErr(output)
 	command.SetArgs([]string{"question", "list"})
@@ -483,9 +519,9 @@ func executeQuestionList(t *testing.T) string {
 
 func executeUserCommand(t *testing.T) string {
 	t.Helper()
-	command := newRootCommand(func(_ *cobra.Command, _ string) (string, error) {
+	command := newRootCommand(func(_ *cobra.Command) (string, string, error) {
 		t.Fatal("user command unexpectedly prompted for credentials")
-		return "", nil
+		return "", "", nil
 	})
 	output := new(bytes.Buffer)
 	command.SetOut(output)

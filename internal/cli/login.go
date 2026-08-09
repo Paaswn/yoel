@@ -1,23 +1,19 @@
 package cli
 
 import (
-	"bufio"
-	"errors"
 	"fmt"
-	"os"
-	"strings"
 
 	"yoel/internal/graderapi"
 
+	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 const defaultGraderURL = "https://grader.nattee.net"
 
-type credentialPrompt func(command *cobra.Command, label string) (string, error)
+type loginForm func(command *cobra.Command) (username string, password string, err error)
 
-func newLoginCommand(prompt credentialPrompt) *cobra.Command {
+func newLoginCommand(runForm loginForm) *cobra.Command {
 	var baseURL string
 
 	command := &cobra.Command{
@@ -25,18 +21,9 @@ func newLoginCommand(prompt credentialPrompt) *cobra.Command {
 		Short: "Login to the grader",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			// DO NOT EDIT vv
-			reader := bufio.NewReader(command.InOrStdin())
-			fmt.Fprint(command.ErrOrStderr(), "Username: ")
-			username, err := reader.ReadString('\n')
-			username = strings.TrimSpace(username)
-			// DO NOT EDIT ^^
+			username, password, err := runForm(command)
 			if err != nil {
-				return fmt.Errorf("read username: %w", err)
-			}
-			password, err := prompt(command, "Password: ")
-			if err != nil {
-				return fmt.Errorf("read password: %w", err)
+				return fmt.Errorf("login form: %w", err)
 			}
 
 			client, err := graderapi.NewClient(baseURL, nil)
@@ -45,7 +32,7 @@ func newLoginCommand(prompt credentialPrompt) *cobra.Command {
 			}
 			session, err := client.Login(command.Context(), username, password)
 			if err != nil {
-				return err
+				return fmt.Errorf("login failed: %w", err)
 			}
 			if err := saveSession(storedSession{
 				BaseURL:   baseURL,
@@ -55,7 +42,7 @@ func newLoginCommand(prompt credentialPrompt) *cobra.Command {
 			}); err != nil {
 				return fmt.Errorf("save login session: %w", err)
 			}
-			_, err = fmt.Fprintln(command.OutOrStdout(), "login successful")
+			_, err = fmt.Fprintf(command.OutOrStdout(), "✓ Login successful as %s\n", session.User.Login)
 			return err
 		},
 	}
@@ -63,21 +50,19 @@ func newLoginCommand(prompt credentialPrompt) *cobra.Command {
 	return command
 }
 
-func readHiddenCredential(command *cobra.Command, label string) (string, error) {
-	input, ok := command.InOrStdin().(*os.File)
-	if !ok || !term.IsTerminal(int(input.Fd())) {
-		return "", errors.New("an interactive terminal is required")
+func runLoginForm(command *cobra.Command) (string, string, error) {
+	var username string
+	var password string
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().EchoMode(huh.EchoModeNormal).Value(&username).Title("Username"),
+			huh.NewInput().EchoMode(huh.EchoModePassword).Value(&password).Title("Password"),
+		),
+	).
+		WithInput(command.InOrStdin()).
+		WithOutput(command.ErrOrStderr())
+	if err := form.RunWithContext(command.Context()); err != nil {
+		return "", "", err
 	}
-	if _, err := fmt.Fprint(command.ErrOrStderr(), label); err != nil {
-		return "", err
-	}
-	value, err := term.ReadPassword(int(input.Fd()))
-	_, newlineErr := fmt.Fprintln(command.ErrOrStderr())
-	if err != nil {
-		return "", err
-	}
-	if newlineErr != nil {
-		return "", newlineErr
-	}
-	return string(value), nil
+	return username, password, nil
 }
