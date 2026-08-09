@@ -81,7 +81,7 @@ func newQuestionNewCommand(opener fileOpener, sessions sessionProvider) *cobra.C
 	var lang string
 	newCmd := &cobra.Command{
 		Use:   "new [id]",
-		Short: "New file based on flag --language, defualt to .cpp",
+		Short: "Create a new file based on flag --language, defualt to .cpp",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			err := showQuestionPDF(command, opener, sessions, args, "", false)
