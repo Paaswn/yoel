@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -14,6 +15,9 @@ import (
 
 	"yoel/internal/graderapi"
 
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
+	lg "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -49,7 +53,8 @@ func newQuestionListCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return printQuestions(command, problems)
+			return showQuestions(command, problems)
+			// return printQuestions(command, problems)
 		},
 	}
 	command.Flags().BoolVar(&refresh, "refresh", false, "refresh questions from the grader")
@@ -262,19 +267,84 @@ func openWithDefaultViewer(path string) error {
 	return nil
 }
 
-func printQuestions(command *cobra.Command, problems []graderapi.Problem) error {
-	output := command.OutOrStdout()
-	if _, err := fmt.Fprintln(output, "Question_Name Id Difficulty"); err != nil {
-		return err
+type Row struct {
+	title string
+	val any
+}
+var headStyle = lg.NewStyle().Bold(true)
+func showQuestions(command *cobra.Command, problems []graderapi.Problem) error {
+	var selected int
+	// var tmp string
+	var options []huh.Option[int]
+	for i, s := range problems {
+		options = append(options,
+			huh.NewOption(s.Name, i),
+)
 	}
-	for _, problem := range problems {
-		difficulty := "-"
-		if problem.Difficulty != nil {
-			difficulty = strconv.Itoa(*problem.Difficulty)
-		}
-		if _, err := fmt.Fprintf(output, "%s %d %s\n", problem.Name, problem.ID, difficulty); err != nil {
-			return err
-		}
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[int]().Title("Questions List").Options(
+				options...
+			).
+			Value(&selected).Height(5),
+
+			huh.NewNote().DescriptionFunc(func() string {
+				prob := &problems[selected]
+				card := lg.JoinVertical(lg.Left, 
+					headStyle.Foreground(lg.Magenta).Render(prob.FullName),
+					lg.NewStyle().Padding(0, 2, 0, 2).Border(lg.ASCIIBorder(), true).Render( 
+						lipgloss.JoinVertical(lg.Left,
+							lipgloss.JoinVertical(lg.Left,
+								headStyle.Render("Question"),
+								formatRow(Row{"ID", prob.ID}),
+								formatRow(Row{"Difficulty", solveDifficulty(prob.Difficulty)}),
+								formatRow(Row{"Tags", prob.Tags}),
+							),
+							lipgloss.JoinVertical(lg.Left,
+								headStyle.Render("Score"),
+								formatRow(Row{"Best", prob.BestScore}),
+								formatRow(Row{"Last", prob.LastScore}),
+								formatRow(Row{"Submissions", prob.SubmissionCount}),
+							),
+							lipgloss.JoinVertical(lg.Left,
+								headStyle.Render("Latest Submission"),
+								formatRow(Row{"Result", prob.LastResult}),
+								formatRow(Row{"Score", prob.LastScore}),
+							),
+						),
+					),
+				)
+				return card
+			},
+			 &selected),
+		),
+	).WithInput(command.InOrStdin()).WithOutput(command.OutOrStdout())
+	return form.Run()
+}
+
+func solveDifficulty(diff *int) string {
+	var builder strings.Builder
+	if diff == nil {
+		return "-"
 	}
-	return nil
+	for i := 0; i < *diff; i+=1 {
+		builder.WriteRune('★')
+	}
+	return builder.String()
+}
+var titleStyle = lg.NewStyle().Faint(true).Width(20).PaddingLeft(1)
+var valueStyle = lg.NewStyle().Bold(true).Italic(false)
+func formatRow(row Row) string {
+	var builder strings.Builder
+	builder.WriteString(titleStyle.Render(row.title))
+	valOfcont := reflect.ValueOf(row.val)
+	if valOfcont.Kind() == reflect.Pointer {
+		valOfcont = valOfcont.Elem()
+	}
+	if !valOfcont.IsValid() {
+		builder.WriteString(valueStyle.Render("-"))
+	} else {
+		builder.WriteString(valueStyle.Render(fmt.Sprintf("%v", valOfcont.Interface())))
+	}
+	return builder.String()
 }

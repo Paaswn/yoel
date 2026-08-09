@@ -11,19 +11,19 @@ import (
 // Problem contains the fields returned by the problem-list endpoint.
 type Problem struct {
 	ID                 int               `json:"id"`
-	Name               string            `json:"name"`
-	FullName           string            `json:"full_name"`
 	Difficulty         *int              `json:"difficulty"`
 	Tags               []string          `json:"tags"`
-	SubmissionCount    int               `json:"submission_count"`
 	BestScore          *float64          `json:"best_score"`
 	LastScore          *float64          `json:"last_score"`
+	SubmissionCount    int               `json:"submission_count"`
 	LastResult         *string           `json:"last_result"`
 	LastSubmissionTime *time.Time        `json:"last_submission_time"`
 	LastSubmissionID   *int              `json:"last_submission_id"`
 	HasTestcase        bool              `json:"has_testcase"`
 	HasAttachment      bool              `json:"has_attachment"`
 	PermittedLanguages []ProblemLanguage `json:"permitted_languages"`
+	Name               string            `json:"name"`
+	FullName           string            `json:"full_name"`
 }
 
 // ProblemLanguage identifies a language permitted for a problem.
