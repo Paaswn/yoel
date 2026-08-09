@@ -21,33 +21,41 @@ func newLoginCommand(runForm loginForm) *cobra.Command {
 		Short: "Login to the grader",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			username, password, err := runForm(command)
-			if err != nil {
-				return fmt.Errorf("login form: %w", err)
-			}
-
-			client, err := graderapi.NewClient(baseURL, nil)
-			if err != nil {
-				return fmt.Errorf("login command: %w", err)
-			}
-			session, err := client.Login(command.Context(), username, password)
-			if err != nil {
-				return fmt.Errorf("login failed: %w", err)
-			}
-			if err := saveSession(storedSession{
-				BaseURL:   baseURL,
-				Token:     session.Token,
-				ExpiresAt: session.ExpiresAt,
-				User:      session.User,
-			}); err != nil {
-				return fmt.Errorf("save login session: %w", err)
-			}
-			_, err = fmt.Fprintf(command.OutOrStdout(), "✓ Login successful as %s\n", session.User.Login)
+			_, err := loginAndSave(command, runForm, baseURL)
 			return err
 		},
 	}
 	command.Flags().StringVar(&baseURL, "base-url", defaultGraderURL, "grader API base URL")
 	return command
+}
+
+func loginAndSave(command *cobra.Command, runForm loginForm, baseURL string) (storedSession, error) {
+	username, password, err := runForm(command)
+	if err != nil {
+		return storedSession{}, fmt.Errorf("login form: %w", err)
+	}
+
+	client, err := graderapi.NewClient(baseURL, nil)
+	if err != nil {
+		return storedSession{}, fmt.Errorf("login command: %w", err)
+	}
+	apiSession, err := client.Login(command.Context(), username, password)
+	if err != nil {
+		return storedSession{}, fmt.Errorf("login failed: %w", err)
+	}
+	session := storedSession{
+		BaseURL:   baseURL,
+		Token:     apiSession.Token,
+		ExpiresAt: apiSession.ExpiresAt,
+		User:      apiSession.User,
+	}
+	if err := saveSession(session); err != nil {
+		return storedSession{}, fmt.Errorf("save login session: %w", err)
+	}
+	if _, err := fmt.Fprintf(command.OutOrStdout(), "✓ Login successful as %s\n", session.User.Login); err != nil {
+		return storedSession{}, err
+	}
+	return session, nil
 }
 
 func runLoginForm(command *cobra.Command) (string, string, error) {
@@ -65,4 +73,23 @@ func runLoginForm(command *cobra.Command) (string, string, error) {
 		return "", "", err
 	}
 	return username, password, nil
+}
+
+func runReloginPrompt(command *cobra.Command) (bool, error) {
+	accepted := true
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Session expired. Log in again?").
+				Affirmative("Yes").
+				Negative("No").
+				Value(&accepted),
+		),
+	).
+		WithInput(command.InOrStdin()).
+		WithOutput(command.ErrOrStderr())
+	if err := form.RunWithContext(command.Context()); err != nil {
+		return false, err
+	}
+	return accepted, nil
 }

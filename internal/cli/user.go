@@ -18,7 +18,7 @@ type userStatistics struct {
 	TotalSubmissions  int
 }
 
-func newUserCommand() *cobra.Command {
+func newUserCommand(sessions sessionProvider) *cobra.Command {
 	return &cobra.Command{
 		Use:   "user",
 		Short: "Show the saved grader user and activity",
@@ -32,7 +32,17 @@ func newUserCommand() *cobra.Command {
 
 			tokenStatus := "expired"
 			var statistics *userStatistics
-			if now.Before(session.ExpiresAt) {
+			if !now.Before(session.ExpiresAt) {
+				renewed, renewErr := sessions(command)
+				if errors.Is(renewErr, errReloginDeclined) {
+					return printUser(command, session, tokenStatus, nil)
+				}
+				if renewErr != nil {
+					return renewErr
+				}
+				session = renewed
+			}
+			if time.Now().Before(session.ExpiresAt) {
 				client, err := graderapi.NewClient(session.BaseURL, nil)
 				if err != nil {
 					return fmt.Errorf("user command: %w", err)

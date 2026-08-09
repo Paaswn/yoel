@@ -23,7 +23,7 @@ import (
 
 type fileOpener func(path string) error
 
-func newQuestionCommand(opener fileOpener) *cobra.Command {
+func newQuestionCommand(opener fileOpener, sessions sessionProvider) *cobra.Command {
 	question := &cobra.Command{
 		Use:   "question",
 		Short: "Work with grader questions",
@@ -32,20 +32,20 @@ func newQuestionCommand(opener fileOpener) *cobra.Command {
 			return command.Help()
 		},
 	}
-	question.AddCommand(newQuestionListCommand())
-	question.AddCommand(newQuestionShowCommand(opener))
-	question.AddCommand(newQuestionNewCommand(opener))
+	question.AddCommand(newQuestionListCommand(sessions))
+	question.AddCommand(newQuestionShowCommand(opener, sessions))
+	question.AddCommand(newQuestionNewCommand(opener, sessions))
 	return question
 }
 
-func newQuestionListCommand() *cobra.Command {
+func newQuestionListCommand(sessions sessionProvider) *cobra.Command {
 	var refresh bool
 	command := &cobra.Command{
 		Use:   "list",
 		Short: "List accessible questions",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			session, err := loadSession(time.Now())
+			session, err := sessions(command)
 			if err != nil {
 				return err
 			}
@@ -61,7 +61,7 @@ func newQuestionListCommand() *cobra.Command {
 	return command
 }
 
-func newQuestionShowCommand(opener fileOpener) *cobra.Command {
+func newQuestionShowCommand(opener fileOpener, sessions sessionProvider) *cobra.Command {
 	var name string
 	var refresh bool
 	command := &cobra.Command{
@@ -69,7 +69,7 @@ func newQuestionShowCommand(opener fileOpener) *cobra.Command {
 		Short: "Open a question statement PDF",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			return showQuestionPDF(command.Context(), opener, args, name, refresh)
+			return showQuestionPDF(command, opener, sessions, args, name, refresh)
 		},
 	}
 	command.Flags().StringVar(&name, "name", "", "question name")
@@ -77,16 +77,16 @@ func newQuestionShowCommand(opener fileOpener) *cobra.Command {
 	return command
 }
 
-func newQuestionNewCommand(opener fileOpener) *cobra.Command {
+func newQuestionNewCommand(opener fileOpener, sessions sessionProvider) *cobra.Command {
 	var lang string
 	newCmd := &cobra.Command{
 		Use:   "new [id]",
 		Short: "New file based on flag --language, defualt to .cpp",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			err := showQuestionPDF(command.Context(), opener, args, "", false)
+			err := showQuestionPDF(command, opener, sessions, args, "", false)
 			if err != nil {
-				return errors.New("question may not exist")
+				return err
 			}
 			calleDir, err := os.Getwd()
 			if err != nil {
@@ -118,7 +118,7 @@ func newQuestionNewCommand(opener fileOpener) *cobra.Command {
 	return newCmd
 }
 
-func showQuestionPDF(ctx context.Context, opener fileOpener, args []string, name string, refresh bool) error {
+func showQuestionPDF(command *cobra.Command, opener fileOpener, sessions sessionProvider, args []string, name string, refresh bool) error {
 	if (len(args) == 0) == (name == "") {
 		return errors.New("provide either a question id or --name")
 	}
@@ -127,7 +127,7 @@ func showQuestionPDF(ctx context.Context, opener fileOpener, args []string, name
 		return err
 	}
 
-	problemID, err := resolveQuestionID(ctx, session, args, name, refresh)
+	problemID, err := resolveQuestionID(command, sessions, session, args, name, refresh)
 	if err != nil {
 		return err
 	}
@@ -139,14 +139,17 @@ func showQuestionPDF(ctx context.Context, opener fileOpener, args []string, name
 		return opener(path)
 	}
 	if !time.Now().Before(session.ExpiresAt) {
-		return errors.New("saved session expired; run yoel login")
+		session, err = sessions(command)
+		if err != nil {
+			return err
+		}
 	}
 
 	client, err := graderapi.NewClient(session.BaseURL, nil)
 	if err != nil {
 		return fmt.Errorf("question show: %w", err)
 	}
-	problemFile, err := client.WithToken(session.Token).DownloadProblemPDF(ctx, problemID)
+	problemFile, err := client.WithToken(session.Token).DownloadProblemPDF(command.Context(), problemID)
 	if err != nil {
 		return err
 	}
@@ -185,7 +188,7 @@ func getQuestions(ctx context.Context, session storedSession, refresh bool, now 
 	return problems, nil
 }
 
-func resolveQuestionID(ctx context.Context, session storedSession, args []string, name string, refresh bool) (int, error) {
+func resolveQuestionID(command *cobra.Command, sessions sessionProvider, session storedSession, args []string, name string, refresh bool) (int, error) {
 	if len(args) == 1 {
 		id, err := strconv.Atoi(args[0])
 		if err != nil || id <= 0 {
@@ -199,10 +202,14 @@ func resolveQuestionID(ctx context.Context, session storedSession, args []string
 	problems := cache.Problems
 	if refresh || !cacheMatches {
 		if !time.Now().Before(session.ExpiresAt) {
-			return 0, errors.New("saved session expired; run yoel login")
+			var err error
+			session, err = sessions(command)
+			if err != nil {
+				return 0, err
+			}
 		}
 		var err error
-		problems, err = getQuestions(ctx, session, true, time.Now())
+		problems, err = getQuestions(command.Context(), session, true, time.Now())
 		if err != nil {
 			return 0, err
 		}
@@ -212,8 +219,14 @@ func resolveQuestionID(ctx context.Context, session storedSession, args []string
 	if err != nil || matchID != 0 {
 		return matchID, err
 	}
-	if !refresh && cacheMatches && time.Now().Before(session.ExpiresAt) {
-		problems, err = getQuestions(ctx, session, true, time.Now())
+	if !refresh && cacheMatches {
+		if !time.Now().Before(session.ExpiresAt) {
+			session, err = sessions(command)
+			if err != nil {
+				return 0, err
+			}
+		}
+		problems, err = getQuestions(command.Context(), session, true, time.Now())
 		if err != nil {
 			return 0, err
 		}
@@ -269,9 +282,11 @@ func openWithDefaultViewer(path string) error {
 
 type Row struct {
 	title string
-	val any
+	val   any
 }
+
 var headStyle = lg.NewStyle().Bold(true)
+
 func showQuestions(command *cobra.Command, problems []graderapi.Problem) error {
 	var selected int
 	// var tmp string
@@ -279,20 +294,20 @@ func showQuestions(command *cobra.Command, problems []graderapi.Problem) error {
 	for i, s := range problems {
 		options = append(options,
 			huh.NewOption(s.Name, i),
-)
+		)
 	}
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[int]().Title("Questions List").Options(
-				options...
+				options...,
 			).
-			Value(&selected).Height(5),
+				Value(&selected).Height(5),
 
 			huh.NewNote().DescriptionFunc(func() string {
 				prob := &problems[selected]
-				card := lg.JoinVertical(lg.Left, 
+				card := lg.JoinVertical(lg.Left,
 					headStyle.Foreground(lg.Magenta).Render(prob.FullName),
-					lg.NewStyle().Padding(0, 2, 0, 2).Border(lg.ASCIIBorder(), true).Render( 
+					lg.NewStyle().Padding(0, 2, 0, 2).Border(lg.ASCIIBorder(), true).Render(
 						lipgloss.JoinVertical(lg.Left,
 							lipgloss.JoinVertical(lg.Left,
 								headStyle.Render("Question"),
@@ -316,7 +331,7 @@ func showQuestions(command *cobra.Command, problems []graderapi.Problem) error {
 				)
 				return card
 			},
-			 &selected),
+				&selected),
 		),
 	).WithInput(command.InOrStdin()).WithOutput(command.OutOrStdout())
 	return form.Run()
@@ -327,13 +342,15 @@ func solveDifficulty(diff *int) string {
 	if diff == nil {
 		return "-"
 	}
-	for i := 0; i < *diff; i+=1 {
+	for i := 0; i < *diff; i += 1 {
 		builder.WriteRune('★')
 	}
 	return builder.String()
 }
+
 var titleStyle = lg.NewStyle().Faint(true).Width(20).PaddingLeft(1)
 var valueStyle = lg.NewStyle().Bold(true).Italic(false)
+
 func formatRow(row Row) string {
 	var builder strings.Builder
 	builder.WriteString(titleStyle.Render(row.title))

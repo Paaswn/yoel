@@ -157,6 +157,158 @@ func TestLoginCommandStopsWhenFormFails(t *testing.T) {
 	}
 }
 
+func TestQuestionListReloginsAndContinuesWithRefreshedToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("TERM", "dumb")
+
+	var loginRequests atomic.Int32
+	var problemRequests atomic.Int32
+	server := newCLITestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/auth/login":
+			loginRequests.Add(1)
+			if r.Method != http.MethodPost {
+				t.Errorf("login method = %s", r.Method)
+			}
+			var request map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decode login request: %v", err)
+			}
+			if request["login"] != "fake-username" || request["password"] != "fake-password" {
+				t.Errorf("login request = %#v", request)
+			}
+			_, _ = fmt.Fprintln(w, `{"token":"fake-refreshed-token","expires_at":"2030-01-02T03:04:05Z","user":{"id":7,"login":"fake-login","full_name":"Fake Student"}}`)
+		case "/api/v1/problems":
+			problemRequests.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer fake-refreshed-token" {
+				t.Errorf("Authorization = %q, want refreshed token", got)
+			}
+			_, _ = fmt.Fprintln(w, `[{"id":42,"name":"arrays","full_name":"Array Problem","difficulty":3}]`)
+		default:
+			t.Errorf("unexpected request path %q", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	if err := saveSession(storedSession{
+		BaseURL:   server.URL,
+		Token:     "fake-expired-token",
+		ExpiresAt: time.Now().Add(-time.Hour),
+		User:      graderapi.User{ID: 7, Login: "fake-login", FullName: "Fake Student"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var confirmations atomic.Int32
+	command := newRootCommandWithDependencies(
+		func(_ *cobra.Command) (string, string, error) {
+			return "fake-username", "fake-password", nil
+		},
+		func(_ *cobra.Command) (bool, error) {
+			confirmations.Add(1)
+			return true, nil
+		},
+		func(string) error { return nil },
+	)
+	output := new(bytes.Buffer)
+	command.SetIn(strings.NewReader("1\n"))
+	command.SetOut(output)
+	command.SetErr(output)
+	command.SetArgs([]string{"question", "list"})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("question list after re-login: %v", err)
+	}
+
+	if confirmations.Load() != 1 || loginRequests.Load() != 1 || problemRequests.Load() != 1 {
+		t.Fatalf("confirmations=%d login requests=%d problem requests=%d, want 1 each", confirmations.Load(), loginRequests.Load(), problemRequests.Load())
+	}
+	if !strings.Contains(output.String(), "✓ Login successful as fake-login") || !strings.Contains(output.String(), "arrays") {
+		t.Fatalf("output = %q, want login success and question list", output.String())
+	}
+	for _, secret := range []string{"fake-password", "fake-refreshed-token", "fake-expired-token"} {
+		if strings.Contains(output.String(), secret) {
+			t.Fatalf("output exposes %q", secret)
+		}
+	}
+	session, err := loadStoredSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.Token != "fake-refreshed-token" || session.BaseURL != server.URL {
+		t.Fatalf("saved refreshed session = %#v", session)
+	}
+}
+
+func TestQuestionListDeclinesReloginWithoutOpeningForm(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	if err := saveSession(storedSession{
+		BaseURL:   "https://grader.example",
+		Token:     "fake-expired-token",
+		ExpiresAt: time.Now().Add(-time.Hour),
+		User:      graderapi.User{ID: 7, Login: "fake-login", FullName: "Fake Student"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	command := newRootCommandWithDependencies(
+		func(_ *cobra.Command) (string, string, error) {
+			t.Fatal("declined re-login unexpectedly opened credential form")
+			return "", "", nil
+		},
+		func(_ *cobra.Command) (bool, error) { return false, nil },
+		func(string) error { return nil },
+	)
+	command.SetArgs([]string{"question", "list"})
+	if err := command.Execute(); !errors.Is(err, errReloginDeclined) {
+		t.Fatalf("error = %v, want errReloginDeclined", err)
+	}
+}
+
+func TestQuestionListReportsFailedReloginWithoutSecrets(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	server := newCLITestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/auth/login" {
+			t.Errorf("unexpected request path %q", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = fmt.Fprintln(w, "fake-private-response")
+	}))
+	defer server.Close()
+
+	if err := saveSession(storedSession{
+		BaseURL:   server.URL,
+		Token:     "fake-expired-token",
+		ExpiresAt: time.Now().Add(-time.Hour),
+		User:      graderapi.User{ID: 7, Login: "fake-login", FullName: "Fake Student"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	command := newRootCommandWithDependencies(
+		func(_ *cobra.Command) (string, string, error) {
+			return "fake-username", "fake-password", nil
+		},
+		func(_ *cobra.Command) (bool, error) { return true, nil },
+		func(string) error { return nil },
+	)
+	command.SetArgs([]string{"question", "list"})
+	err := command.Execute()
+	if !errors.Is(err, graderapi.ErrAuthentication) {
+		t.Fatalf("error = %v, want ErrAuthentication", err)
+	}
+	for _, secret := range []string{"fake-username", "fake-password", "fake-expired-token", "fake-private-response"} {
+		if strings.Contains(err.Error(), secret) {
+			t.Fatalf("error exposes %q: %v", secret, err)
+		}
+	}
+}
+
 func TestQuestionListCachesAndRefreshesProblems(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
