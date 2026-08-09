@@ -25,7 +25,7 @@ cd Yoel && go build -o yoel .\cmd\yoel\main.go
 # then add the binary to your system's PATH
 ```
 
-### Mac and Linux
+### Mac & Linux
 ```sh 
 # clone this repo to anywhere using this command
 git clone https://github.com/Paaswn/Yoel.git --depth=1
