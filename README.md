@@ -5,11 +5,18 @@ Yoel is a cli client for [Chula's Computer Engineering Grader](https://grader.na
 ## Backstory you must have before using this cli
 If you are a person who hate copying your source code, paste it to the browser, then come back to the IDE over and over like me, Yoel is for you. Yoel make querying, writing, and submitting grader's question a piece of cake. The only requirement is access to the grader site.
 
-## Build
+## Install
+## Build from source
+```sh || pwsh
+# clone this repo to anywhere using this command
+git clone https://github.com/Paaswn/Yoel.git --depth=1
+cd Yoel && go build -o yoel ./cmd/yoel/main.go
+# then add the binary to your system's PATH
+```
 
 ## Quick demo
 ```sh
-# on your first session prompteasiet
+# on your first session prompt this
 yoel login 
 
 # then you can
