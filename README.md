@@ -12,7 +12,7 @@ If you are a person who hate copying your source code, paste it to the browser, 
 ### Windows
 ```pwsh
 # clone this repo to anywhere using this command
-git clone https://github.com/Paaswn/Yoel.git --depth=1
+git clone https://github.com/Paaswn/yoel.git --depth=1
 cd Yoel && go build -o yoel .\cmd\yoel\main.go
 # then add the binary to your system's PATH
 ```
