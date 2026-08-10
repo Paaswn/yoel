@@ -32,17 +32,18 @@ func newQuestionCommand(opener fileOpener, sessions sessionProvider) *cobra.Comm
 			return command.Help()
 		},
 	}
-	question.AddCommand(newQuestionListCommand(sessions))
+	question.AddCommand(newQuestionListCommand(opener, sessions))
 	question.AddCommand(newQuestionShowCommand(opener, sessions))
 	question.AddCommand(newQuestionNewCommand(opener, sessions))
 	return question
 }
 
-func newQuestionListCommand(sessions sessionProvider) *cobra.Command {
+func newQuestionListCommand(opener fileOpener, sessions sessionProvider) *cobra.Command {
+	var lang string
 	var refresh bool
 	command := &cobra.Command{
 		Use:   "list",
-		Short: "List accessible questions",
+		Short: "Interactively create a new question file",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			session, err := sessions(command)
@@ -53,10 +54,14 @@ func newQuestionListCommand(sessions sessionProvider) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return showQuestions(command, problems)
-			// return printQuestions(command, problems)
+			problemID, err := showQuestions(command, problems)
+			if err != nil {
+				return err
+			}
+			return createQuestion(command, opener, sessions, strconv.Itoa(problemID), lang)
 		},
 	}
+	command.Flags().StringVar(&lang, "language", "", "language of choice")
 	command.Flags().BoolVar(&refresh, "refresh", false, "refresh questions from the grader")
 	return command
 }
@@ -81,41 +86,42 @@ func newQuestionNewCommand(opener fileOpener, sessions sessionProvider) *cobra.C
 	var lang string
 	newCmd := &cobra.Command{
 		Use:   "new [id]",
-		Short: "Create a new file based on flag --language, defualt to .cpp",
+		Short: "Create a new question file",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			err := showQuestionPDF(command, opener, sessions, args, "", false)
-			if err != nil {
-				return err
-			}
-			calleDir, err := os.Getwd()
-			if err != nil {
-				return fmt.Errorf("find current directory: %w", err)
-			}
-
-			if lang == "" {
-				lang = "cpp"
-			}
-
-			name := strings.Join([]string{args[0], lang}, ".")
-			filePath := filepath.Join(calleDir, name)
-			file, err := os.Create(filePath)
-			if err != nil {
-				return fmt.Errorf("create source file: %w", err)
-			}
-			if _, err := file.WriteString("// --- Automatically Created by yoel ---\n"); err != nil {
-				file.Close()
-				return fmt.Errorf("write source file: %w", err)
-			}
-			if err := file.Close(); err != nil {
-				return fmt.Errorf("close source file: %w", err)
-			}
-
-			return nil
+			return createQuestion(command, opener, sessions, args[0], lang)
 		},
 	}
 	newCmd.Flags().StringVar(&lang, "language", "", "language of choice")
 	return newCmd
+}
+
+func createQuestion(command *cobra.Command, opener fileOpener, sessions sessionProvider, questionID string, lang string) error {
+	if err := showQuestionPDF(command, opener, sessions, []string{questionID}, "", false); err != nil {
+		return err
+	}
+
+	currentDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("find current directory: %w", err)
+	}
+	if lang == "" {
+		lang = "cpp"
+	}
+
+	filePath := filepath.Join(currentDir, strings.Join([]string{questionID, lang}, "."))
+	file, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("create source file: %w", err)
+	}
+	if _, err := file.WriteString("// --- Automatically Created by yoel ---\n"); err != nil {
+		file.Close()
+		return fmt.Errorf("write source file: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close source file: %w", err)
+	}
+	return nil
 }
 
 func showQuestionPDF(command *cobra.Command, opener fileOpener, sessions sessionProvider, args []string, name string, refresh bool) error {
@@ -287,14 +293,15 @@ type Row struct {
 
 var headStyle = lg.NewStyle().Bold(true)
 
-func showQuestions(command *cobra.Command, problems []graderapi.Problem) error {
+func showQuestions(command *cobra.Command, problems []graderapi.Problem) (int, error) {
+	if len(problems) == 0 {
+		return 0, errors.New("no accessible questions")
+	}
+
 	var selected int
-	// var tmp string
-	var options []huh.Option[int]
-	for i, s := range problems {
-		options = append(options,
-			huh.NewOption(s.Name, i),
-		)
+	options := make([]huh.Option[int], 0, len(problems))
+	for i, problem := range problems {
+		options = append(options, huh.NewOption(problem.Name, i))
 	}
 	form := huh.NewForm(
 		huh.NewGroup(
@@ -334,7 +341,10 @@ func showQuestions(command *cobra.Command, problems []graderapi.Problem) error {
 				&selected),
 		),
 	).WithInput(command.InOrStdin()).WithOutput(command.OutOrStdout())
-	return form.Run()
+	if err := form.RunWithContext(command.Context()); err != nil {
+		return 0, err
+	}
+	return problems[selected].ID, nil
 }
 
 func solveDifficulty(diff *int) string {

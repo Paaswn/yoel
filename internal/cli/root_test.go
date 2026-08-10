@@ -161,9 +161,12 @@ func TestQuestionListReloginsAndContinuesWithRefreshedToken(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("TERM", "dumb")
+	workingDirectory := t.TempDir()
+	t.Chdir(workingDirectory)
 
 	var loginRequests atomic.Int32
 	var problemRequests atomic.Int32
+	var pdfRequests atomic.Int32
 	server := newCLITestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/auth/login":
@@ -185,6 +188,13 @@ func TestQuestionListReloginsAndContinuesWithRefreshedToken(t *testing.T) {
 				t.Errorf("Authorization = %q, want refreshed token", got)
 			}
 			_, _ = fmt.Fprintln(w, `[{"id":42,"name":"arrays","full_name":"Array Problem","difficulty":3}]`)
+		case "/api/v1/problems/42/files/pdf":
+			pdfRequests.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer fake-refreshed-token" {
+				t.Errorf("PDF Authorization = %q, want refreshed token", got)
+			}
+			w.Header().Set("Content-Type", "application/pdf")
+			_, _ = fmt.Fprintln(w, "%PDF-1.7")
 		default:
 			t.Errorf("unexpected request path %q", r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
@@ -221,8 +231,11 @@ func TestQuestionListReloginsAndContinuesWithRefreshedToken(t *testing.T) {
 		t.Fatalf("question list after re-login: %v", err)
 	}
 
-	if confirmations.Load() != 1 || loginRequests.Load() != 1 || problemRequests.Load() != 1 {
-		t.Fatalf("confirmations=%d login requests=%d problem requests=%d, want 1 each", confirmations.Load(), loginRequests.Load(), problemRequests.Load())
+	if confirmations.Load() != 1 || loginRequests.Load() != 1 || problemRequests.Load() != 1 || pdfRequests.Load() != 1 {
+		t.Fatalf("confirmations=%d login requests=%d problem requests=%d PDF requests=%d, want 1 each", confirmations.Load(), loginRequests.Load(), problemRequests.Load(), pdfRequests.Load())
+	}
+	if _, err := os.Stat(filepath.Join(workingDirectory, "42.cpp")); err != nil {
+		t.Fatalf("stat interactively created source file: %v", err)
 	}
 	if !strings.Contains(output.String(), "✓ Login successful as fake-login") || !strings.Contains(output.String(), "arrays") {
 		t.Fatalf("output = %q, want login success and question list", output.String())
@@ -313,18 +326,28 @@ func TestQuestionListCachesAndRefreshesProblems(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("TERM", "dumb")
+	t.Chdir(t.TempDir())
 
 	var requests atomic.Int32
 	questionName := "arrays"
 	server := newCLITestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests.Add(1)
-		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/problems" {
-			t.Errorf("request = %s %s", r.Method, r.URL.Path)
-		}
 		if got := r.Header.Get("Authorization"); got != "Bearer fake-token" {
 			t.Errorf("Authorization = %q", got)
 		}
-		_, _ = fmt.Fprintf(w, `[{"id":42,"name":%q,"full_name":"Array Problem","difficulty":3},{"id":43,"name":"unknown","full_name":"Unknown Difficulty","difficulty":null}]`, questionName)
+		switch r.URL.Path {
+		case "/api/v1/problems":
+			requests.Add(1)
+			if r.Method != http.MethodGet {
+				t.Errorf("problem request method = %s", r.Method)
+			}
+			_, _ = fmt.Fprintf(w, `[{"id":42,"name":%q,"full_name":"Array Problem","difficulty":3},{"id":43,"name":"unknown","full_name":"Unknown Difficulty","difficulty":null}]`, questionName)
+		case "/api/v1/problems/42/files/pdf":
+			w.Header().Set("Content-Type", "application/pdf")
+			_, _ = fmt.Fprintln(w, "%PDF-1.7")
+		default:
+			t.Errorf("unexpected request = %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
 	}))
 	defer server.Close()
 
@@ -371,6 +394,75 @@ func TestQuestionListCachesAndRefreshesProblems(t *testing.T) {
 	}
 	if got := requests.Load(); got != 2 {
 		t.Fatalf("requests after stale cache = %d, want 2", got)
+	}
+}
+
+func TestQuestionListCreatesSelectedQuestion(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("TERM", "dumb")
+	workingDirectory := t.TempDir()
+	t.Chdir(workingDirectory)
+
+	pdf := []byte("%PDF-1.7\nselected question")
+	server := newCLITestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/problems":
+			_, _ = fmt.Fprintln(w, `[{"id":42,"name":"arrays","full_name":"Array Problem"},{"id":43,"name":"graphs","full_name":"Graph Problem"}]`)
+		case "/api/v1/problems/43/files/pdf":
+			w.Header().Set("Content-Type", "application/pdf")
+			_, _ = w.Write(pdf)
+		default:
+			t.Errorf("unexpected request = %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	if err := saveSession(storedSession{
+		BaseURL:   server.URL,
+		Token:     "fake-token",
+		ExpiresAt: time.Now().Add(time.Hour),
+		User:      graderapi.User{ID: 7, Login: "fake-login", FullName: "Fake Student"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var openedPath string
+	command := newRootCommandWithOpener(func(_ *cobra.Command) (string, string, error) {
+		t.Fatal("question list unexpectedly prompted for credentials")
+		return "", "", nil
+	}, func(path string) error {
+		openedPath = path
+		return nil
+	})
+	command.SetIn(strings.NewReader("2\n"))
+	command.SetOut(new(bytes.Buffer))
+	command.SetErr(new(bytes.Buffer))
+	command.SetArgs([]string{"question", "list", "--language", "go"})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("question list: %v", err)
+	}
+
+	source, err := os.ReadFile(filepath.Join(workingDirectory, "43.go"))
+	if err != nil {
+		t.Fatalf("read interactively created source file: %v", err)
+	}
+	if got, want := string(source), "// --- Automatically Created by yoel ---\n"; got != want {
+		t.Fatalf("created source = %q, want %q", got, want)
+	}
+	if filepath.Ext(openedPath) != ".pdf" {
+		t.Fatalf("opened path = %q, want cached PDF path", openedPath)
+	}
+	if _, err := os.Stat(filepath.Join(workingDirectory, "42.go")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unselected question source exists or returned unexpected error: %v", err)
+	}
+}
+
+func TestShowQuestionsRejectsEmptyList(t *testing.T) {
+	command := &cobra.Command{}
+	if _, err := showQuestions(command, nil); err == nil || err.Error() != "no accessible questions" {
+		t.Fatalf("showQuestions() error = %v, want no accessible questions", err)
 	}
 }
 
@@ -654,10 +746,10 @@ func executeQuestionShow(t *testing.T, opener fileOpener, args ...string) {
 
 func executeQuestionList(t *testing.T) string {
 	t.Helper()
-	command := newRootCommand(func(_ *cobra.Command) (string, string, error) {
+	command := newRootCommandWithOpener(func(_ *cobra.Command) (string, string, error) {
 		t.Fatal("question list unexpectedly prompted for credentials")
 		return "", "", nil
-	})
+	}, func(string) error { return nil })
 	output := new(bytes.Buffer)
 	command.SetIn(strings.NewReader("1\n"))
 	command.SetOut(output)
