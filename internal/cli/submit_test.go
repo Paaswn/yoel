@@ -59,7 +59,7 @@ func TestProblemIDFromFilenameRejectsInvalidNames(t *testing.T) {
 	}
 }
 
-func TestSubmitCommandReadsFileAndSubmitsBasename(t *testing.T) {
+func TestQuestionSubmitReadsFileAndShowsAcknowledgement(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 
@@ -115,12 +115,14 @@ func TestSubmitCommandReadsFileAndSubmitsBasename(t *testing.T) {
 	output := new(bytes.Buffer)
 	command.SetOut(output)
 	command.SetErr(new(bytes.Buffer))
-	command.SetArgs([]string{"submit", sourcePath})
+	command.SetArgs([]string{"question", "submit", sourcePath})
 	if err := command.Execute(); err != nil {
 		t.Fatalf("submit: %v", err)
 	}
-	if got, want := output.String(), "✓ Submission 924618 created (number 3, status submitted)\n"; got != want {
-		t.Fatalf("output = %q, want %q", got, want)
+	for _, expected := range []string{"✓ Submission created", "ID      924618", "Attempt 3", "Status  submitted"} {
+		if !strings.Contains(output.String(), expected) {
+			t.Fatalf("output = %q, want %q", output.String(), expected)
+		}
 	}
 	for _, secret := range []string{"fake-token", source} {
 		if strings.Contains(output.String(), secret) {

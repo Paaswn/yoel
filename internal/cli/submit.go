@@ -10,6 +10,7 @@ import (
 
 	"yoel/internal/graderapi"
 
+	lg "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -47,16 +48,23 @@ func newSubmitCommand(sessions sessionProvider) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			_, err = fmt.Fprintf(
-				command.OutOrStdout(),
-				"✓ Submission %d created (number %d, status %s)\n",
-				submission.ID,
-				submission.Number,
-				submission.Status,
-			)
+			_, err = fmt.Fprintln(command.OutOrStdout(), renderSubmissionAcknowledgement(submission))
 			return err
 		},
 	}
+}
+
+var submissionCardStyle = lg.NewStyle().Border(lg.RoundedBorder()).Padding(0, 1)
+var submissionHeadingStyle = lg.NewStyle().Bold(true).Foreground(lg.Green)
+
+func renderSubmissionAcknowledgement(submission graderapi.Submission) string {
+	return submissionCardStyle.Render(lg.JoinVertical(
+		lg.Left,
+		submissionHeadingStyle.Render("✓ Submission created"),
+		fmt.Sprintf("ID      %d", submission.ID),
+		fmt.Sprintf("Attempt %d", submission.Number),
+		fmt.Sprintf("Status  %s", submission.Status),
+	))
 }
 
 func problemIDFromFilename(name string) (int, error) {

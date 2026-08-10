@@ -29,7 +29,6 @@ func newRootCommandWithDependencies(form loginForm, confirm reloginPrompt, opene
 	sessions := newSessionProvider(form, confirm)
 	root.AddCommand(newLoginCommand(form))
 	root.AddCommand(newQuestionCommand(opener, sessions))
-	root.AddCommand(newSubmitCommand(sessions))
 	root.AddCommand(newUserCommand(sessions))
 	return root
 }
