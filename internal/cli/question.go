@@ -348,6 +348,9 @@ func showQuestions(command *cobra.Command, problems []graderapi.Problem) (grader
 				Value(&selected).Height(5),
 
 			huh.NewNote().DescriptionFunc(func() string {
+				formatRow := func(row Row) string {
+					return formatRow(titleStyle, valueStyle, row)
+				}
 				prob := &problems[selected]
 				card := lg.JoinVertical(lg.Left,
 					headStyle.Foreground(lg.Magenta).Render(prob.FullName),
@@ -398,17 +401,17 @@ func solveDifficulty(diff *int) string {
 var titleStyle = lg.NewStyle().Faint(true).Width(20).PaddingLeft(1)
 var valueStyle = lg.NewStyle().Bold(true).Italic(false)
 
-func formatRow(row Row) string {
+func formatRow(title lg.Style, value lg.Style, row Row) string {
 	var builder strings.Builder
-	builder.WriteString(titleStyle.Render(row.title))
+	builder.WriteString(title.Render(row.title))
 	valOfcont := reflect.ValueOf(row.val)
 	if valOfcont.Kind() == reflect.Pointer {
 		valOfcont = valOfcont.Elem()
 	}
 	if !valOfcont.IsValid() {
-		builder.WriteString(valueStyle.Render("-"))
+		builder.WriteString(value.Render("-"))
 	} else {
-		builder.WriteString(valueStyle.Render(fmt.Sprintf("%v", valOfcont.Interface())))
+		builder.WriteString(value.Render(fmt.Sprintf("%v", valOfcont.Interface())))
 	}
 	return builder.String()
 }

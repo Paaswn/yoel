@@ -255,7 +255,8 @@ func TestWaitForSubmissionHonorsCancellation(t *testing.T) {
 
 func TestRenderSubmissionResultShowsCompilerError(t *testing.T) {
 	message := "main.cpp:1: error: expected ';'\n    return 0"
-	output := renderSubmissionResult(graderapi.Submission{
+	output := renderSubmissionResult(false,
+	 graderapi.Submission{
 		ID:              924618,
 		Number:          3,
 		Language:        "cpp",
@@ -284,4 +285,30 @@ func TestSubmitCommandRejectsInvalidFilenameBeforeLoadingSession(t *testing.T) {
 	if sessionCalls != 0 {
 		t.Fatalf("session provider called %d times, want 0", sessionCalls)
 	}
+}
+
+func TestRenderSubmissionResultShot(t *testing.T) {
+	points := 100.0
+	graderComment := "PPPP"
+	maxRuntime := 0.125
+	peakMemory := 2048
+	result := "correct"
+	score := 100.00
+	score, mem := 0, 0
+	fmt.Fprintln(os.Stderr, renderSubmissionResultShort(graderapi.Submission{
+		ID:            924618,
+		Number:        3,
+		Language:      "cpp",
+		Status:        "done",
+		ProblemID:     673,
+		ProblemName:   "hello",
+		SubmittedAt:   time.Now(),
+		Points:        &points,
+		GraderComment: &graderComment,
+		MaxRuntime:    &maxRuntime,
+		PeakMemory:    &peakMemory,
+		Evaluations: []graderapi.Evaluation{
+			{TestcaseID: 11, Result: &result, Score: &score, Time: &mem, Memory: &mem},
+		},
+	}))
 }

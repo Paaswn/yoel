@@ -70,7 +70,7 @@ func newSubmitCommand(sessions sessionProvider) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			_, err = fmt.Fprintln(command.OutOrStdout(), renderSubmissionResult(submission))
+			_, err = fmt.Fprintln(command.OutOrStdout(), renderSubmissionResult(long, submission))
 			return err
 		},
 	}
@@ -120,7 +120,35 @@ func submissionFinished(status string) bool {
 	}
 }
 
-func renderSubmissionResult(submission graderapi.Submission) string {
+func renderSubmissionResultShort(submission graderapi.Submission) string {
+	tt := titleStyle.Width(10)
+	lines := []string{
+		renderSubmissionHeading(submission.Status),
+		formatRow(tt, valueStyle, Row{"Attempt", submission.Number}),
+	}
+	if submission.GraderComment != nil && strings.TrimSpace(*submission.GraderComment) != "" {
+		var score string;
+		if submission.Points != nil {
+			score = strconv.FormatFloat(*submission.Points, 'f', 2, 64)
+		} else {
+			score = "-"
+		}
+		lines = append(lines, formatRow(tt, valueStyle, Row{"Score", fmt.Sprintf("[%v] / %v %% ",  *submission.GraderComment,  score)}))
+	}
+	if submission.CompilerMessage != nil && strings.TrimSpace(*submission.CompilerMessage) != "" {
+		lines = append(lines, "Compiler message", indentSubmissionMessage(*submission.CompilerMessage))
+	}
+	if len(submission.Evaluations) > 0 {
+		for _, evaluation := range submission.Evaluations {
+			lines = append(lines, resolveResult(*evaluation.Result))
+		}
+	}
+	return submissionCardStyle.Render(lg.JoinVertical(lg.Left, lines...))
+}
+func renderSubmissionResult(long bool ,submission graderapi.Submission) string {
+	if !long {
+		return renderSubmissionResultShort(submission)
+	}
 	lines := []string{
 		renderSubmissionHeading(submission.Status),
 		fmt.Sprintf("ID       %d", submission.ID),
@@ -154,6 +182,12 @@ func renderSubmissionResult(submission graderapi.Submission) string {
 	return submissionCardStyle.Render(lg.JoinVertical(lg.Left, lines...))
 }
 
+func resolveResult(result string) string {
+	if result == "" || result == "wrong" {
+		return "✗"
+	} 
+	return "✔"
+}
 func renderSubmissionHeading(status string) string {
 	switch strings.ToLower(status) {
 	case "done":
