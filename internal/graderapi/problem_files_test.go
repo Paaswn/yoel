@@ -54,6 +54,79 @@ func TestDownloadProblemPDF(t *testing.T) {
 	}
 }
 
+func TestDownloadProblemAttachment(t *testing.T) {
+	wantData := []byte("PK\x03\x04fake zip")
+	server := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/problems/673/files/attachment" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer fake-token" {
+			t.Errorf("Authorization = %q", got)
+		}
+		if got := r.Header.Get("Accept"); got != "application/zip, application/octet-stream" {
+			t.Errorf("Accept = %q", got)
+		}
+		w.Header().Set("Content-Disposition", `attachment; filename="../starter.zip"`)
+		w.Header().Set("Content-Type", "application/zip")
+		_, _ = w.Write(wantData)
+	}))
+	defer server.Close()
+
+	client, err := NewClient(server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := client.WithToken("fake-token").DownloadProblemAttachment(context.Background(), 673)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(file.Data, wantData) || file.Filename != "starter.zip" || file.ContentType != "application/zip" {
+		t.Fatalf("file = %#v", file)
+	}
+}
+
+func TestDownloadProblemAttachmentRejectsInvalidIDAndEmptyResponse(t *testing.T) {
+	client, err := NewClient("https://grader.example", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.DownloadProblemAttachment(context.Background(), 0); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("invalid ID error = %v, want ErrInvalidInput", err)
+	}
+
+	server := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer server.Close()
+	client, err = NewClient(server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.WithToken("fake-token").DownloadProblemAttachment(context.Background(), 673); !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("empty response error = %v, want ErrInvalidResponse", err)
+	}
+}
+
+func TestDownloadProblemAttachmentNonSuccessDoesNotExposeSecrets(t *testing.T) {
+	const token = "fake-attachment-token"
+	const bodySecret = "fake-private-attachment-response"
+	server := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, bodySecret)
+	}))
+	defer server.Close()
+
+	client, err := NewClient(server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.WithToken(token).DownloadProblemAttachment(context.Background(), 673)
+	if !errors.Is(err, ErrAuthentication) {
+		t.Fatalf("error = %v, want ErrAuthentication", err)
+	}
+	if strings.Contains(err.Error(), token) || strings.Contains(err.Error(), bodySecret) {
+		t.Fatalf("error exposes secret: %v", err)
+	}
+}
+
 func TestDownloadProblemPDFRejectsInvalidProblemID(t *testing.T) {
 	client, err := NewClient("https://grader.example", nil)
 	if err != nil {

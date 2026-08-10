@@ -47,6 +47,56 @@ func TestListProblemsSendsAuthenticatedGETAndDecodesProblems(t *testing.T) {
 	}
 }
 
+func TestGetProblemSendsAuthenticatedGETAndDecodesDetails(t *testing.T) {
+	server := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/problems/673" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer fake-token" {
+			t.Errorf("Authorization = %q", got)
+		}
+		_, _ = w.Write([]byte(`{"id":673,"name":"starter","full_name":"Starter Problem","submission_count":0,"has_attachment":true,"submission_ids":[]}`))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	problem, err := client.WithToken("fake-token").GetProblem(context.Background(), 673)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if problem.ID != 673 || problem.Name != "starter" || problem.FullName != "Starter Problem" || !problem.HasAttachment {
+		t.Fatalf("problem = %#v", problem)
+	}
+}
+
+func TestGetProblemRejectsMismatchedResponseID(t *testing.T) {
+	server := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"id":674,"name":"other","full_name":"Other Problem"}`))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.WithToken("fake-token").GetProblem(context.Background(), 673); !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("error = %v, want ErrInvalidResponse", err)
+	}
+}
+
+func TestGetProblemRejectsInvalidIDWithoutRequest(t *testing.T) {
+	client, err := NewClient("https://grader.example", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.GetProblem(context.Background(), 0); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("error = %v, want ErrInvalidInput", err)
+	}
+}
+
 func TestListProblemsClassifiesAuthenticationFailure(t *testing.T) {
 	server := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)

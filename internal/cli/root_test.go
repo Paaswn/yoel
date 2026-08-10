@@ -556,17 +556,22 @@ func TestQuestionNewCreatesSourceAndOpensPDF(t *testing.T) {
 
 	pdf := []byte("%PDF-1.7\nnew question statement")
 	server := newCLITestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/problems/673/files/pdf" {
-			t.Errorf("request = %s %s", r.Method, r.URL.Path)
-		}
-		if got := r.Header.Get("Accept"); got != "application/pdf" {
-			t.Errorf("Accept = %q", got)
-		}
 		if got := r.Header.Get("Authorization"); got != "Bearer fake-token" {
 			t.Errorf("Authorization = %q", got)
 		}
-		w.Header().Set("Content-Type", "application/pdf")
-		_, _ = w.Write(pdf)
+		switch r.URL.Path {
+		case "/api/v1/problems/673":
+			_, _ = fmt.Fprintln(w, `{"id":673,"name":"arrays","full_name":"Array Problem","submission_count":0,"has_attachment":false,"submission_ids":[]}`)
+		case "/api/v1/problems/673/files/pdf":
+			if got := r.Header.Get("Accept"); got != "application/pdf" {
+				t.Errorf("Accept = %q", got)
+			}
+			w.Header().Set("Content-Type", "application/pdf")
+			_, _ = w.Write(pdf)
+		default:
+			t.Errorf("unexpected request = %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
 	}))
 	defer server.Close()
 

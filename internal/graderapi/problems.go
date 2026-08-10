@@ -44,3 +44,23 @@ func (c *Client) ListProblems(ctx context.Context) ([]Problem, error) {
 	}
 	return problems, nil
 }
+
+// GetProblem returns one accessible problem's details.
+func (c *Client) GetProblem(ctx context.Context, problemID int) (Problem, error) {
+	if problemID <= 0 {
+		return Problem{}, fmt.Errorf("get problem: %w: problem ID must be positive", ErrInvalidInput)
+	}
+
+	body, err := c.do(ctx, "get problem", http.MethodGet, fmt.Sprintf("/api/v1/problems/%d", problemID), nil, true)
+	if err != nil {
+		return Problem{}, err
+	}
+	var problem Problem
+	if err := json.Unmarshal(body, &problem); err != nil {
+		return Problem{}, fmt.Errorf("get problem: %w: malformed response", ErrInvalidResponse)
+	}
+	if problem.ID != problemID || problem.Name == "" || problem.FullName == "" {
+		return Problem{}, fmt.Errorf("get problem: %w: response is missing required fields", ErrInvalidResponse)
+	}
+	return problem, nil
+}
