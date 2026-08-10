@@ -12,7 +12,7 @@ ARM computers on Windows, macOS, and Linux.
 
 ```pwsh
 $script = Join-Path $env:TEMP 'yoel-install.ps1'
-Invoke-WebRequest https://raw.githubusercontent.com/Paaswn/yoel/main/scripts/install.ps1 -OutFile $script
+Invoke-WebRequest https://raw.githubusercontent.com/Paaswn/yoel/master/scripts/install.ps1 -OutFile $script
 & $script
 
 ```
@@ -20,7 +20,7 @@ Invoke-WebRequest https://raw.githubusercontent.com/Paaswn/yoel/main/scripts/ins
 ### macOS & Linux
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Paaswn/yoel/main/scripts/install.sh -o /tmp/yoel-install.sh
+curl -fsSL https://raw.githubusercontent.com/Paaswn/yoel/master/scripts/install.sh -o /tmp/yoel-install.sh
 sh /tmp/yoel-install.sh
 
 ```
@@ -55,4 +55,5 @@ yoel question submit [file] # will submit this file to grader
 Thanks to [cobra](https://github.com/spf13/cobra), [huh](https://github.com/charmbracelet/huh) and [lipgloss](https://github.com/charmbracelet/lipgloss), Yoel will be one of the **easiest** and **prettiest** cli tool you will ever use.
 
 ## LLM Usage
+
 ~90% of this repo was written by Codex, [see agent's stuffs](.agents). Afaik, I wrote `showQuestionList()`, some of its helper-functions inside [question.go](internal/cli/question.go), and this README.
