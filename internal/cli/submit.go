@@ -24,7 +24,8 @@ const (
 var errInvalidSubmissionFilename = errors.New("source filename must match <positive-problem-id>.<extension>")
 
 func newSubmitCommand(sessions sessionProvider) *cobra.Command {
-	return &cobra.Command{
+	var long bool;
+	command :=  &cobra.Command{
 		Use:   "submit [file]",
 		Short: "Submit a source file to the grader",
 		Args:  cobra.ExactArgs(1),
@@ -73,6 +74,8 @@ func newSubmitCommand(sessions sessionProvider) *cobra.Command {
 			return err
 		},
 	}
+	command.Flags().BoolVar(&long, "long", false, "show additional details of submission response")
+	return command;
 }
 
 var submissionCardStyle = lg.NewStyle().Border(lg.RoundedBorder()).Padding(0, 1)

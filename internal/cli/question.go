@@ -35,7 +35,6 @@ func newQuestionCommand(opener fileOpener, sessions sessionProvider) *cobra.Comm
 	question.AddCommand(newQuestionListCommand(opener, sessions))
 	question.AddCommand(newQuestionShowCommand(opener, sessions))
 	question.AddCommand(newQuestionNewCommand(opener, sessions))
-	question.AddCommand(newSubmitCommand(sessions))
 	return question
 }
 

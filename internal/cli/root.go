@@ -30,5 +30,6 @@ func newRootCommandWithDependencies(form loginForm, confirm reloginPrompt, opene
 	root.AddCommand(newLoginCommand(form))
 	root.AddCommand(newQuestionCommand(opener, sessions))
 	root.AddCommand(newUserCommand(sessions))
+	root.AddCommand(newSubmitCommand(sessions))
 	return root
 }
