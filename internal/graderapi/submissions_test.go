@@ -205,6 +205,132 @@ func TestSubmitRejectsMalformedIncompleteAndOversizedResponses(t *testing.T) {
 	}
 }
 
+func TestGetSubmissionSendsAuthenticatedGETAndDecodesResult(t *testing.T) {
+	server := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/submissions/924618" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("Accept"); got != "application/json" {
+			t.Errorf("Accept = %q", got)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer fake-token" {
+			t.Errorf("Authorization = %q", got)
+		}
+		if got := r.Header.Get("Content-Type"); got != "" {
+			t.Errorf("Content-Type = %q, want empty", got)
+		}
+		_, _ = io.WriteString(w, `{
+			"id":924618,
+			"problem_id":673,
+			"problem_name":"hello",
+			"user_id":7,
+			"language":"cpp",
+			"source":"private source that must not be retained",
+			"source_filename":"673.cpp",
+			"submitted_at":"2030-01-02T03:04:05Z",
+			"points":75.5,
+			"status":"done",
+			"grader_comment":"partial score",
+			"compiler_message":null,
+			"max_runtime":0.125,
+			"peak_memory":2048,
+			"number":3,
+			"evaluations":[{"testcase_id":11,"result":"correct","score":25.5,"time":12,"memory":256}]
+		}`)
+	}))
+	defer server.Close()
+
+	client, err := NewClient(server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	submission, err := client.WithToken("fake-token").GetSubmission(context.Background(), 924618)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if submission.ID != 924618 || submission.ProblemID != 673 || submission.ProblemName != "hello" || submission.Language != "cpp" || submission.Number != 3 || submission.Status != "done" {
+		t.Fatalf("submission = %#v", submission)
+	}
+	if submission.Points == nil || *submission.Points != 75.5 || submission.GraderComment == nil || *submission.GraderComment != "partial score" {
+		t.Fatalf("submission result fields = %#v", submission)
+	}
+	if submission.MaxRuntime == nil || *submission.MaxRuntime != 0.125 || submission.PeakMemory == nil || *submission.PeakMemory != 2048 {
+		t.Fatalf("submission resource fields = %#v", submission)
+	}
+	if len(submission.Evaluations) != 1 || submission.Evaluations[0].Result == nil || *submission.Evaluations[0].Result != "correct" {
+		t.Fatalf("evaluations = %#v", submission.Evaluations)
+	}
+}
+
+func TestGetSubmissionRejectsInvalidIDWithoutRequest(t *testing.T) {
+	var requests atomic.Int32
+	server := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+	}))
+	defer server.Close()
+
+	client, err := NewClient(server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, submissionID := range []int{0, -1} {
+		if _, err := client.GetSubmission(context.Background(), submissionID); !errors.Is(err, ErrInvalidInput) {
+			t.Errorf("GetSubmission(%d) error = %v, want ErrInvalidInput", submissionID, err)
+		}
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("server received %d requests, want 0", requests.Load())
+	}
+}
+
+func TestGetSubmissionClassifiesAuthenticationFailure(t *testing.T) {
+	server := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, "fake-private-response")
+	}))
+	defer server.Close()
+
+	client, err := NewClient(server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.WithToken("fake-token").GetSubmission(context.Background(), 924618)
+	if !errors.Is(err, ErrAuthentication) {
+		t.Fatalf("error = %v, want ErrAuthentication", err)
+	}
+	if strings.Contains(err.Error(), "fake-token") || strings.Contains(err.Error(), "fake-private-response") {
+		t.Fatalf("error exposes secret: %v", err)
+	}
+}
+
+func TestGetSubmissionRejectsMalformedIncompleteAndOversizedResponses(t *testing.T) {
+	responses := map[string]string{
+		"malformed":          "not-json",
+		"missing ID":         `{"problem_id":673,"language":"cpp","submitted_at":"2030-01-02T03:04:05Z"}`,
+		"missing problem ID": `{"id":924618,"language":"cpp","submitted_at":"2030-01-02T03:04:05Z"}`,
+		"missing language":   `{"id":924618,"problem_id":673,"submitted_at":"2030-01-02T03:04:05Z"}`,
+		"missing timestamp":  `{"id":924618,"problem_id":673,"language":"cpp"}`,
+		"oversized":          strings.Repeat("x", maxResponseBodySize+1),
+	}
+	for name, response := range responses {
+		t.Run(name, func(t *testing.T) {
+			server := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = io.WriteString(w, response)
+			}))
+			defer server.Close()
+
+			client, err := NewClient(server.URL, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = client.WithToken("fake-token").GetSubmission(context.Background(), 924618)
+			if !errors.Is(err, ErrInvalidResponse) {
+				t.Fatalf("error = %v, want ErrInvalidResponse", err)
+			}
+		})
+	}
+}
+
 func TestSubmitHonorsContextCancellation(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
