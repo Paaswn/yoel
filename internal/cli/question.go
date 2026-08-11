@@ -84,31 +84,60 @@ func newQuestionShowCommand(opener fileOpener, sessions sessionProvider) *cobra.
 
 func newQuestionNewCommand(opener fileOpener, sessions sessionProvider) *cobra.Command {
 	var lang string
+	var problemID int
+	var refresh bool
 	newCmd := &cobra.Command{
-		Use:   "new [id]",
-		Short: "Create a new question file",
-		Args:  cobra.ExactArgs(1),
+		Use:   "new [order]",
+		Short: "Create a new question by list order or grader ID",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			problemID, err := strconv.Atoi(args[0])
-			if err != nil || problemID <= 0 {
-				return errors.New("question id must be a positive integer")
+			idProvided := command.Flags().Changed("id")
+			if (len(args) == 1) == idProvided {
+				return errors.New("provide either a question order or --id")
+			}
+			order := 0
+			if idProvided {
+				if problemID <= 0 {
+					return errors.New("question id must be a positive integer")
+				}
+			} else {
+				var err error
+				order, err = strconv.Atoi(args[0])
+				if err != nil || order <= 0 {
+					return errors.New("question order must be a positive integer")
+				}
 			}
 			session, err := sessions(command)
 			if err != nil {
 				return err
 			}
-			client, err := graderapi.NewClient(session.BaseURL, nil)
-			if err != nil {
-				return fmt.Errorf("question new: %w", err)
-			}
-			problem, err := client.WithToken(session.Token).GetProblem(command.Context(), problemID)
-			if err != nil {
-				return err
+
+			var problem graderapi.Problem
+			if idProvided {
+				client, err := graderapi.NewClient(session.BaseURL, nil)
+				if err != nil {
+					return fmt.Errorf("question new: %w", err)
+				}
+				problem, err = client.WithToken(session.Token).GetProblem(command.Context(), problemID)
+				if err != nil {
+					return err
+				}
+			} else {
+				problems, err := getQuestions(command.Context(), session, refresh, time.Now())
+				if err != nil {
+					return err
+				}
+				if order > len(problems) {
+					return fmt.Errorf("question order %d is out of range; %d questions are available", order, len(problems))
+				}
+				problem = problems[order-1]
 			}
 			return createQuestion(command, opener, sessions, problem, lang)
 		},
 	}
 	newCmd.Flags().StringVar(&lang, "language", "", "language of choice")
+	newCmd.Flags().IntVar(&problemID, "id", 0, "grader problem ID")
+	newCmd.Flags().BoolVar(&refresh, "refresh", false, "refresh questions from the grader")
 	return newCmd
 }
 func createQuestion(command *cobra.Command, opener fileOpener, sessions sessionProvider, problem graderapi.Problem, lang string) error {
@@ -138,7 +167,7 @@ func createQuestion(command *cobra.Command, opener fileOpener, sessions sessionP
 		return fmt.Errorf("create temporary question directory: %w", err)
 	}
 	defer os.RemoveAll(temporaryDir)
-	
+
 	if _, err := os.Lstat(problemDir); err == nil {
 		return fmt.Errorf("create question directory: %s already exists", problemDir)
 	} else if !os.IsNotExist(err) {
@@ -150,14 +179,14 @@ func createQuestion(command *cobra.Command, opener fileOpener, sessions sessionP
 			return err
 		}
 	} else {
-		if err := createQuestionNoAttachment(temporaryDir, questionID , lang ); err != nil {
+		if err := createQuestionNoAttachment(temporaryDir, questionID, lang); err != nil {
 			return err
 		}
 	}
 	if err := createQuestionPDFReference(temporaryDir, problemDir, pdfPath); err != nil {
 		return err
 	}
-	
+
 	return os.Rename(temporaryDir, problemDir)
 }
 func createQuestionNoAttachment(temporaryDir string, questionID string, lang string) error {
@@ -405,7 +434,7 @@ func showQuestions(command *cobra.Command, problems []graderapi.Problem) (grader
 							),
 							lipgloss.JoinVertical(lg.Left,
 								headStyle.Render("Resources"),
-								formatRow(Row{"Attachment", boolAsSym( prob.HasAttachment )}),
+								formatRow(Row{"Attachment", boolAsSym(prob.HasAttachment)}),
 								formatRow(Row{"Test Cases", boolAsSym(prob.HasTestcase)}),
 							),
 						),
@@ -424,7 +453,7 @@ func showQuestions(command *cobra.Command, problems []graderapi.Problem) (grader
 func boolAsSym(b bool) string {
 	if !b {
 		return "✗"
-	} 
+	}
 	return "✔"
 }
 

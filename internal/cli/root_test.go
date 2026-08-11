@@ -234,7 +234,7 @@ func TestQuestionListReloginsAndContinuesWithRefreshedToken(t *testing.T) {
 	if confirmations.Load() != 1 || loginRequests.Load() != 1 || problemRequests.Load() != 1 || pdfRequests.Load() != 1 {
 		t.Fatalf("confirmations=%d login requests=%d problem requests=%d PDF requests=%d, want 1 each", confirmations.Load(), loginRequests.Load(), problemRequests.Load(), pdfRequests.Load())
 	}
-	if _, err := os.Stat(filepath.Join(workingDirectory, "42.cpp")); err != nil {
+	if _, err := os.Stat(filepath.Join(workingDirectory, "arrays", "42.cpp")); err != nil {
 		t.Fatalf("stat interactively created source file: %v", err)
 	}
 	if !strings.Contains(output.String(), "✓ Login successful as fake-login") || !strings.Contains(output.String(), "arrays") {
@@ -326,7 +326,8 @@ func TestQuestionListCachesAndRefreshesProblems(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("TERM", "dumb")
-	t.Chdir(t.TempDir())
+	workingDirectory := t.TempDir()
+	t.Chdir(workingDirectory)
 
 	var requests atomic.Int32
 	questionName := "arrays"
@@ -369,6 +370,9 @@ func TestQuestionListCachesAndRefreshesProblems(t *testing.T) {
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("requests after first list = %d, want 1", got)
 	}
+	if err := os.RemoveAll(filepath.Join(workingDirectory, "arrays")); err != nil {
+		t.Fatal(err)
+	}
 
 	secondOutput := executeQuestionList(t)
 	if !strings.Contains(secondOutput, "arrays") {
@@ -376,6 +380,9 @@ func TestQuestionListCachesAndRefreshesProblems(t *testing.T) {
 	}
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("cached list made a server request; count = %d", got)
+	}
+	if err := os.RemoveAll(filepath.Join(workingDirectory, "arrays")); err != nil {
+		t.Fatal(err)
 	}
 
 	cache, err := loadQuestionCache()
@@ -444,17 +451,17 @@ func TestQuestionListCreatesSelectedQuestion(t *testing.T) {
 		t.Fatalf("question list: %v", err)
 	}
 
-	source, err := os.ReadFile(filepath.Join(workingDirectory, "43.go"))
+	source, err := os.ReadFile(filepath.Join(workingDirectory, "graphs", "43.go"))
 	if err != nil {
 		t.Fatalf("read interactively created source file: %v", err)
 	}
-	if got, want := string(source), "// --- Automatically Created by yoel ---\n"; got != want {
+	if got, want := string(source), "// --- Automatically Created by yoel ---\n#include <iostream>\nusing namespace std;\n\nint main(){\n\n}"; got != want {
 		t.Fatalf("created source = %q, want %q", got, want)
 	}
 	if filepath.Ext(openedPath) != ".pdf" {
 		t.Fatalf("opened path = %q, want cached PDF path", openedPath)
 	}
-	if _, err := os.Stat(filepath.Join(workingDirectory, "42.go")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(workingDirectory, "arrays", "42.go")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("unselected question source exists or returned unexpected error: %v", err)
 	}
 }
@@ -603,16 +610,16 @@ func TestQuestionNewCreatesSourceAndOpensPDF(t *testing.T) {
 	}, opener)
 	command.SetOut(new(bytes.Buffer))
 	command.SetErr(new(bytes.Buffer))
-	command.SetArgs([]string{"question", "new", "673"})
+	command.SetArgs([]string{"question", "new", "--id", "673"})
 	if err := command.Execute(); err != nil {
 		t.Fatalf("question new: %v", err)
 	}
 
-	source, err := os.ReadFile(filepath.Join(workingDirectory, "673.cpp"))
+	source, err := os.ReadFile(filepath.Join(workingDirectory, "arrays", "673.cpp"))
 	if err != nil {
 		t.Fatalf("read created source file: %v", err)
 	}
-	if got, want := string(source), "// --- Automatically Created by yoel ---\n"; got != want {
+	if got, want := string(source), "// --- Automatically Created by yoel ---\n#include <iostream>\nusing namespace std;\n\nint main(){\n\n}"; got != want {
 		t.Fatalf("created source = %q, want %q", got, want)
 	}
 	if openedPath == "" || filepath.Ext(openedPath) != ".pdf" {

@@ -69,7 +69,7 @@ func TestQuestionNewExtractsSingleAttachmentSourceAndCreatesReadPDF(t *testing.T
 	})
 	command.SetOut(new(bytes.Buffer))
 	command.SetErr(new(bytes.Buffer))
-	command.SetArgs([]string{"question", "new", "673"})
+	command.SetArgs([]string{"question", "new", "--id", "673"})
 	if err := command.Execute(); err != nil {
 		t.Fatalf("question new: %v", err)
 	}
