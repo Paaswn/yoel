@@ -38,20 +38,48 @@ does not work, download the matching archive manually from the
 currently code-signed or macOS-notarized, so Windows SmartScreen or macOS
 Gatekeeper may show a warning; do not disable platform security protections.
 
-## Commands
-
+## Usage
 ```sh || pwsh
-yoel help # display all command available for yoel
-
-yoel login # prompt this in your first time using yoel
-
-yoel question list # this will show an interactive list of grader's questions
-# or
-yoel question new [id] # this, without --language [lang] flag, will create an id.cpp file automatically
-
-yoel question submit [file] # will submit this file to grader
+# validate your installation
+yoel --help
+# on your first use of yoel use this command
+yoel login
+```
+### Example
+```
+. (cwd)
+```
+```sh || pwsh
+# you can create a new quetion with question number ( follow grader's order )
+yoel question new 1
+# or pass a specific question's id
+yoel question new --id 674
+# or 
+yoel question list 
+```
+```sh
+.
+├── CPP-Basics-1/  # from `yoel question 1`
+│   ├── 673.cpp
+│   └── symlink_to_PDF
+├── CPP-Basics-2/ # from `yoel question --id 674`
+│   ├── 674.cpp
+│   └── symlink_to_PDF
+├── CPP-Basics-3/ # from choosing in `yoel question list` window
+│   ├── 676.cpp
+│   └── symlink_to_PDF
 ```
 
+to submit a question back to grader
+```sh || pwsh
+# you can submit the folder of question
+yoel submit ExampleQustion
+# or a source file of question, yoel will automatically find your file under cwd
+yoel submit question_id.cpp
+# relative or absolute path also accepted
+yoel submit ExampleQuestion/example_id.cpp
+yoel submit /home/user/ExampleQuestion/example_id.cpp
+```
 Thanks to [cobra](https://github.com/spf13/cobra), [huh](https://github.com/charmbracelet/huh) and [lipgloss](https://github.com/charmbracelet/lipgloss), Yoel will be one of the **easiest** and **prettiest** cli tool you will ever use.
 
 ## LLM Usage
