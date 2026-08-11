@@ -136,7 +136,7 @@ func TestQuestionSubmitReadsFileAndShowsResult(t *testing.T) {
 	output := new(bytes.Buffer)
 	command.SetOut(output)
 	command.SetErr(new(bytes.Buffer))
-	command.SetArgs([]string{"question", "submit", sourcePath})
+	command.SetArgs([]string{"submit", sourcePath, "--long"})
 	if err := command.Execute(); err != nil {
 		t.Fatalf("submit: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestWaitForSubmissionHonorsCancellation(t *testing.T) {
 
 func TestRenderSubmissionResultShowsCompilerError(t *testing.T) {
 	message := "main.cpp:1: error: expected ';'\n    return 0"
-	output := renderSubmissionResult(false,
+	output := renderSubmissionResult(true,
 	 graderapi.Submission{
 		ID:              924618,
 		Number:          3,

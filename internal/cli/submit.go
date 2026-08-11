@@ -26,17 +26,15 @@ var errInvalidSubmissionFilename = errors.New("source filename must match <posit
 func newSubmitCommand(sessions sessionProvider) *cobra.Command {
 	var long bool;
 	command :=  &cobra.Command{
-		Use:   "submit [file]",
-		Short: "Submit a source file to the grader",
+		Use:   "submit [file-or-directory]",
+		Short: "Submit a source file or question directory",
+		Long:  "Submit a source file or recursively resolve it from a question directory. If a named file does not exist directly, the current directory is searched recursively for its exact basename.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			sourcePath := args[0]
-			filename := filepath.Base(sourcePath)
-			problemID, err := problemIDFromFilename(filename)
+			sourcePath, filename, problemID, err := resolveSubmissionSource(args[0])
 			if err != nil {
 				return err
 			}
-
 			source, err := os.ReadFile(sourcePath)
 			if err != nil {
 				return fmt.Errorf("read source file: %w", err)
@@ -185,7 +183,7 @@ func renderSubmissionResult(long bool ,submission graderapi.Submission) string {
 func resultAsSym(result string) string {
 	if result == "" || result == "wrong" {
 		return "✗"
-	} 
+	}
 	return "✔"
 }
 func renderSubmissionHeading(status string) string {
