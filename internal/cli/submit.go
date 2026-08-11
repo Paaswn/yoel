@@ -136,9 +136,10 @@ func renderSubmissionResultShort(submission graderapi.Submission) string {
 	if submission.CompilerMessage != nil && strings.TrimSpace(*submission.CompilerMessage) != "" {
 		lines = append(lines, "Compiler message", indentSubmissionMessage(*submission.CompilerMessage))
 	}
+	lines = append(lines, headStyle.Render("Result"))
 	if len(submission.Evaluations) > 0 {
-		for _, evaluation := range submission.Evaluations {
-			lines = append(lines, resultAsSym(*evaluation.Result))
+		for i, evaluation := range submission.Evaluations {
+			lines = append(lines, formatRow(tt, valueStyle, Row{fmt.Sprintf("Test %v", i+1), resultAsSym(*evaluation.Result)}))
 		}
 	}
 	return submissionCardStyle.Render(lg.JoinVertical(lg.Left, lines...))
