@@ -111,13 +111,13 @@ func newQuestionNewCommand(opener fileOpener, sessions sessionProvider) *cobra.C
 	newCmd.Flags().StringVar(&lang, "language", "", "language of choice")
 	return newCmd
 }
-
 func createQuestion(command *cobra.Command, opener fileOpener, sessions sessionProvider, problem graderapi.Problem, lang string) error {
 	session, err := sessions(command)
 	if err != nil {
 		return err
 	}
 	questionID := strconv.Itoa(problem.ID)
+
 	pdfPath, err := openQuestionPDFForSession(command, opener, session, problem.ID, false)
 	if err != nil {
 		return err
@@ -127,19 +127,49 @@ func createQuestion(command *cobra.Command, opener fileOpener, sessions sessionP
 	if err != nil {
 		return fmt.Errorf("find current directory: %w", err)
 	}
-	if problem.HasAttachment {
-		return createQuestionFromAttachment(command.Context(), session, problem, currentDir, pdfPath)
+
+	problemDir, err := questionDirectory(currentDir, problem.Name)
+	if err != nil {
+		return err
 	}
+
+	temporaryDir, err := os.MkdirTemp(currentDir, ".yoel-question-*")
+	if err != nil {
+		return fmt.Errorf("create temporary question directory: %w", err)
+	}
+	defer os.RemoveAll(temporaryDir)
+	
+	if _, err := os.Lstat(problemDir); err == nil {
+		return fmt.Errorf("create question directory: %s already exists", problemDir)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect question directory: %w", err)
+	}
+
+	if problem.HasAttachment {
+		if err := createQuestionFromAttachment(command.Context(), session, problem, temporaryDir); err != nil {
+			return err
+		}
+	} else {
+		if err := createQuestionNoAttachment(temporaryDir, questionID , lang ); err != nil {
+			return err
+		}
+	}
+	if err := createQuestionPDFReference(temporaryDir, problemDir, pdfPath); err != nil {
+		return err
+	}
+	
+	return os.Rename(temporaryDir, problemDir)
+}
+func createQuestionNoAttachment(temporaryDir string, questionID string, lang string) error {
 	if lang == "" {
 		lang = "cpp"
 	}
-
-	filePath := filepath.Join(currentDir, strings.Join([]string{questionID, lang}, "."))
+	filePath := filepath.Join(temporaryDir, strings.Join([]string{questionID, lang}, "."))
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("create source file: %w", err)
 	}
-	if _, err := file.WriteString("// --- Automatically Created by yoel ---\n"); err != nil {
+	if _, err := file.WriteString("// --- Automatically Created by yoel ---\n#include <iostream>\nusing namespace std;\n\nint main(){\n\n}"); err != nil {
 		file.Close()
 		return fmt.Errorf("write source file: %w", err)
 	}
@@ -373,6 +403,11 @@ func showQuestions(command *cobra.Command, problems []graderapi.Problem) (grader
 								formatRow(Row{"Result", prob.LastResult}),
 								formatRow(Row{"Score", prob.LastScore}),
 							),
+							lipgloss.JoinVertical(lg.Left,
+								headStyle.Render("Resources"),
+								formatRow(Row{"Attachment", boolAsSym( prob.HasAttachment )}),
+								formatRow(Row{"Test Cases", boolAsSym(prob.HasTestcase)}),
+							),
 						),
 					),
 				)
@@ -385,6 +420,12 @@ func showQuestions(command *cobra.Command, problems []graderapi.Problem) (grader
 		return graderapi.Problem{}, err
 	}
 	return problems[selected], nil
+}
+func boolAsSym(b bool) string {
+	if !b {
+		return "✗"
+	} 
+	return "✔"
 }
 
 func solveDifficulty(diff *int) string {

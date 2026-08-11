@@ -140,7 +140,7 @@ func renderSubmissionResultShort(submission graderapi.Submission) string {
 	}
 	if len(submission.Evaluations) > 0 {
 		for _, evaluation := range submission.Evaluations {
-			lines = append(lines, resolveResult(*evaluation.Result))
+			lines = append(lines, resultAsSym(*evaluation.Result))
 		}
 	}
 	return submissionCardStyle.Render(lg.JoinVertical(lg.Left, lines...))
@@ -182,7 +182,7 @@ func renderSubmissionResult(long bool ,submission graderapi.Submission) string {
 	return submissionCardStyle.Render(lg.JoinVertical(lg.Left, lines...))
 }
 
-func resolveResult(result string) string {
+func resultAsSym(result string) string {
 	if result == "" || result == "wrong" {
 		return "✗"
 	} 

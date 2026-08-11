@@ -25,17 +25,17 @@ const (
 	maxAttachmentPathLength          = 240
 )
 
-func createQuestionFromAttachment(ctx context.Context, session storedSession, problem graderapi.Problem, currentDir, pdfPath string) error {
-	problemDir, err := questionDirectory(currentDir, problem.Name)
-	if err != nil {
-		return err
-	}
-	if _, err := os.Lstat(problemDir); err == nil {
-		return fmt.Errorf("create question directory: %s already exists", problemDir)
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("inspect question directory: %w", err)
-	}
-
+func createQuestionFromAttachment(ctx context.Context, session storedSession, problem graderapi.Problem, temporaryDir string) error {
+	// problemDir, err := questionDirectory(currentDir, problem.Name)
+	// if err != nil {
+	// 	return err
+	// }
+	// if _, err := os.Lstat(problemDir); err == nil {
+	// 	return fmt.Errorf("create question directory: %s already exists", problemDir)
+	// } else if !os.IsNotExist(err) {
+	// 	return fmt.Errorf("inspect question directory: %w", err)
+	// }
+	// using 
 	client, err := graderapi.NewClient(session.BaseURL, nil)
 	if err != nil {
 		return fmt.Errorf("question attachment: %w", err)
@@ -44,12 +44,12 @@ func createQuestionFromAttachment(ctx context.Context, session storedSession, pr
 	if err != nil {
 		return err
 	}
-
-	temporaryDir, err := os.MkdirTemp(currentDir, ".yoel-question-*")
-	if err != nil {
-		return fmt.Errorf("create temporary question directory: %w", err)
-	}
-	defer os.RemoveAll(temporaryDir)
+	// using
+	// temporaryDir, err := os.MkdirTemp(currentDir, ".yoel-question-*")
+	// if err != nil {
+	// 	return fmt.Errorf("create temporary question directory: %w", err)
+	// }
+	// defer os.RemoveAll(temporaryDir)
 
 	files, err := extractQuestionAttachment(attachment.Data, temporaryDir)
 	if err != nil {
@@ -64,12 +64,13 @@ func createQuestionFromAttachment(ctx context.Context, session storedSession, pr
 			return err
 		}
 	}
-	if err := createQuestionPDFReference(temporaryDir, problemDir, pdfPath); err != nil {
-		return err
-	}
-	if err := os.Rename(temporaryDir, problemDir); err != nil {
-		return fmt.Errorf("create question directory: %w", err)
-	}
+	// using
+	// if err := createQuestionPDFReference(temporaryDir, problemDir, pdfPath); err != nil {
+	// 	return err
+	// }
+	// if err := os.Rename(temporaryDir, problemDir); err != nil {
+	// 	return fmt.Errorf("create question directory: %w", err)
+	// }
 	return nil
 }
 
