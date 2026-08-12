@@ -32,6 +32,34 @@ func TestParseAndCompareVersions(t *testing.T) {
 	}
 }
 
+func TestConfirmUpdateUsesHuhConfirmation(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{name: "yes", input: "y\n", want: true},
+		{name: "no", input: "n\n", want: false},
+		{name: "default", input: "\n", want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			command := &cobra.Command{}
+			command.SetIn(strings.NewReader(tt.input))
+			command.SetErr(new(bytes.Buffer))
+
+			got, err := confirmUpdate(command)
+			if err != nil {
+				t.Fatalf("confirmUpdate() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("confirmUpdate() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestLatestVersionValidatesGitHubResponses(t *testing.T) {
 	for name, response := range map[string]struct {
 		status  int
