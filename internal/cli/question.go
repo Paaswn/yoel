@@ -52,7 +52,7 @@ func newQuestionListCommand(opener fileOpener, sessions sessionProvider) *cobra.
 				return err
 			}
 			var problems []graderapi.Problem
-			err = spinner.New().WithInput(nil).WithOutput(command.OutOrStdout()).Title("Fetching questions...").ActionWithErr(
+			err = spinner.New().WithInput(nil).WithOutput(command.ErrOrStderr()).Title("Fetching questions...").ActionWithErr(
 				func(context context.Context) error {
 					problems, err = getQuestions(context, session, refresh, time.Now())
 					if err != nil {
@@ -215,6 +215,7 @@ func createQuestion(command *cobra.Command, opener fileOpener, sessions sessionP
 	if err := recordCreatedQuestion(problem, problemDir, sourcePath); err != nil {
 		return recordCreatedQuestionError(problem.ID, err)
 	}
+	fmt.Fprintln(command.ErrOrStderr(), lg.NewStyle().Faint(true).Render("✔ Created question directory at", problemDir))
 	return nil
 }
 func createQuestionNoAttachment(temporaryDir string, questionID string, lang string) error {
@@ -432,7 +433,7 @@ func showQuestions(command *cobra.Command, problems []graderapi.Problem) (grader
 			problemName = lg.NewStyle().Foreground(lg.Green).Render("●", problem.Name)
 		} else  {
 			problemName = lg.NewStyle().Foreground(lg.Yellow).Render("◐", problem.Name)
-		} 		
+		}
 		options = append(options, huh.NewOption(problemName, i))
 	}
 	form := huh.NewForm(
@@ -441,7 +442,7 @@ func showQuestions(command *cobra.Command, problems []graderapi.Problem) (grader
 				options...,
 			).
 				Value(&selected).Height(5),
-			
+
 			huh.NewNote().DescriptionFunc(func() string {
 				formatRow := func(row Row) string {
 					return formatRow(titleStyle, valueStyle, row)

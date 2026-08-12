@@ -30,6 +30,7 @@ func newRootCommandWithDependenciesAndVersion(form loginForm, confirm reloginPro
 	root := &cobra.Command{
 		Use:           "yoel",
 		Short:         "A command-line client for Cafe Grader",
+		Version: version,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(command *cobra.Command, _ []string) error {
