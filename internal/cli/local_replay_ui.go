@@ -68,6 +68,9 @@ func (m *submissionResultModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.revision++
 		commands = append(commands, waitForLocalReplay(m.updates))
 	}
+	if ignoreReplayDetailKey(m.form, message) {
+		return m, tea.Batch(commands...)
+	}
 	formModel, command := m.form.Update(message)
 	if form, ok := formModel.(*huh.Form); ok {
 		m.form = form
@@ -77,6 +80,23 @@ func (m *submissionResultModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		commands = append(commands, tea.Quit)
 	}
 	return m, tea.Batch(commands...)
+}
+
+func ignoreReplayDetailKey(form *huh.Form, message tea.Msg) bool {
+	if _, ok := form.GetFocusedField().(*huh.Note); !ok {
+		return false
+	}
+	key, ok := message.(tea.KeyPressMsg)
+	if !ok {
+		return false
+	}
+	if key.Mod&tea.ModCtrl != 0 && key.Code == 'c' {
+		return false
+	}
+	if key.Code == tea.KeyEnter || key.Code == tea.KeyReturn {
+		return false
+	}
+	return key.Code != tea.KeyTab || key.Mod != tea.ModShift
 }
 
 func (m *submissionResultModel) View() tea.View {

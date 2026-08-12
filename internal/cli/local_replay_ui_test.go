@@ -6,6 +6,9 @@ import (
 
 	"yoel/internal/graderapi"
 	"yoel/internal/runner"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
 )
 
 func TestSubmissionResultModelKeepsSelectionWhileAsyncResultsArrive(t *testing.T) {
@@ -51,5 +54,42 @@ func TestRenderLocalReplayCompileFailureIncludesDiagnostic(t *testing.T) {
 	})
 	if !strings.Contains(got, "Local replay · local compilation failed") || !strings.Contains(got, "missing semicolon") {
 		t.Fatalf("output = %q", got)
+	}
+}
+
+func TestSubmissionResultModelIgnoresUnexpectedKeysInDetailView(t *testing.T) {
+	wrong := "wrong"
+	model := newSubmissionResultModel(graderapi.Submission{
+		Evaluations: []graderapi.Evaluation{{TestcaseID: 11, Result: &wrong}},
+	}, nil)
+	model.form.NextGroup()
+
+	if _, ok := model.form.GetFocusedField().(*huh.Note); !ok {
+		t.Fatal("detail note is not focused")
+	}
+	_, command := model.Update(tea.KeyPressMsg(tea.Key{Code: 'x', Text: "x"}))
+	if command != nil {
+		t.Fatal("unexpected key produced a command")
+	}
+	if model.form.State != huh.StateNormal {
+		t.Fatalf("form state = %v, want normal", model.form.State)
+	}
+}
+
+func TestSubmissionResultModelKeepsNavigationAndCancellationKeys(t *testing.T) {
+	wrong := "wrong"
+	model := newSubmissionResultModel(graderapi.Submission{
+		Evaluations: []graderapi.Evaluation{{TestcaseID: 11, Result: &wrong}},
+	}, nil)
+	model.form.NextGroup()
+
+	for _, key := range []tea.KeyPressMsg{
+		tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}),
+		tea.KeyPressMsg(tea.Key{Code: tea.KeyTab, Mod: tea.ModShift}),
+		tea.KeyPressMsg(tea.Key{Code: 'c', Text: "c", Mod: tea.ModCtrl}),
+	} {
+		if ignoreReplayDetailKey(model.form, key) {
+			t.Fatalf("key %q was ignored", key.String())
+		}
 	}
 }
