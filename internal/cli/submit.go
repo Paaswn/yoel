@@ -12,6 +12,7 @@ import (
 
 	"yoel/internal/graderapi"
 
+	"charm.land/huh/v2/spinner"
 	lg "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 )
@@ -59,21 +60,21 @@ func newSubmitCommandWithUpdateNotice(sessions sessionProvider, showUpdateNotice
 			if err != nil {
 				return err
 			}
-			if _, err := fmt.Fprintf(command.OutOrStdout(), "Waiting for submission %d...\n", submission.ID); err != nil {
-				return err
-			}
-			submission, err = waitForSubmission(
-				command.Context(),
+			err = spinner.New().ActionWithErr(func(context context.Context) error {
+				submission, err = waitForSubmission(
+					context,
 				authenticatedClient,
 				submission.ID,
 				submissionPollInterval,
 				submissionPollTimeout,
-			)
+				)
+				return err
+			}).Title(fmt.Sprintf("Waiting for submission %d", submission.ID)).Run()
 			if err != nil {
 				return err
 			}
 			if interactiveTerminal(command) {
-				if err = newRenderSubmissionResult(command, sourcePath, authenticatedClient, submission); err != nil {
+				if err = renderSubmissionResultInteractive(command, sourcePath, authenticatedClient, submission); err != nil {
 					return err
 				}
 			} else {
@@ -181,6 +182,7 @@ func renderSubmissionSummary(submission graderapi.Submission) string {
 	}
 	return submissionCardStyle.Render(lg.JoinVertical(lg.Left, lines...))
 }
+
 func renderSubmissionResult(long bool, submission graderapi.Submission) string {
 	if !long {
 		return renderSubmissionResultShort(submission)

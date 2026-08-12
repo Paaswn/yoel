@@ -16,6 +16,7 @@ import (
 	"yoel/internal/graderapi"
 
 	"charm.land/huh/v2"
+	"charm.land/huh/v2/spinner"
 	"charm.land/lipgloss/v2"
 	lg "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
@@ -50,7 +51,16 @@ func newQuestionListCommand(opener fileOpener, sessions sessionProvider) *cobra.
 			if err != nil {
 				return err
 			}
-			problems, err := getQuestions(command.Context(), session, refresh, time.Now())
+			var problems []graderapi.Problem
+			err = spinner.New().Title("Fetching questions...").ActionWithErr(
+				func(context context.Context) error {
+					problems, err = getQuestions(context, session, refresh, time.Now())
+					if err != nil {
+						return err
+					}
+					return nil
+				},
+			).Run()
 			if err != nil {
 				return err
 			}
