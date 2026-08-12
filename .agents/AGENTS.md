@@ -1,5 +1,27 @@
 # AGENTS.md
 
+## Current workspace status
+
+The executable is `cmd/yoel` and builds as `yoel` (`yoel.exe` on Windows). Its
+module path is `yoel`; Cobra commands live in `internal/cli`, while
+`internal/graderapi` remains the isolated HTTP/JSON boundary for Cafe Grader.
+
+The CLI currently owns login/session persistence, question cache and PDF
+downloads, source submission and result polling, and the `user` command. Do
+not move those product decisions into `internal/graderapi`.
+
+Release builds inject `main.version` from a `vMAJOR.MINOR.PATCH` tag via
+`.github/workflows/release.yml`. Local builds use `dev`. The official release
+source is `Paaswn/yoel`; archives are named `yoel_<version>_<os>_<arch>` and
+are installed/updated only through `scripts/install.sh` or `scripts/install.ps1`.
+`yoel update` reuses those installers after explicit confirmation. It must not
+silently update ordinary commands or overwrite package-manager-managed installs.
+
+After an interactive completed submission, a CLI-only update notice may check
+GitHub Releases at most once per 24 hours. Its timestamp is a non-secret user
+cache entry and `YOEL_NO_UPDATE_CHECK=1` disables it. Failed checks are ignored
+and must not affect submission results.
+
 ## Project
 
 This repository is a learning-focused Go client for the Cafe Grader JSON API.

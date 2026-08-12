@@ -38,6 +38,22 @@ does not work, download the matching archive manually from the
 currently code-signed or macOS-notarized, so Windows SmartScreen or macOS
 Gatekeeper may show a warning; do not disable platform security protections.
 
+## Updates
+
+Release builds can check and install the latest Yoel release with:
+
+```sh
+yoel update
+```
+
+The command always asks for confirmation in an interactive terminal. After an
+interactive submission result, Yoel may show a once-per-day availability notice;
+set `YOEL_NO_UPDATE_CHECK=1` to disable those checks. Installations managed by a
+package manager should be updated by that manager instead (for example, `brew
+upgrade yoel` or `scoop update yoel`); Yoel does not try to detect or overwrite
+package-manager-owned binaries. For a custom installer directory, rerun the
+installer with `YOEL_INSTALL_DIR` set to that directory.
+
 ## Usage
 ```sh || pwsh
 # validate your installation

@@ -13,10 +13,11 @@ import (
 )
 
 const (
-	applicationDir    = "yoel"
-	sessionFilename   = "session.json"
-	questionsFilename = "questions.json"
-	questionCacheTTL  = 5 * time.Minute
+	applicationDir      = "yoel"
+	sessionFilename     = "session.json"
+	questionsFilename   = "questions.json"
+	updateCheckFilename = "update-check.json"
+	questionCacheTTL    = 5 * time.Minute
 )
 
 type storedSession struct {
@@ -31,6 +32,10 @@ type questionCache struct {
 	UserID    int                 `json:"user_id"`
 	FetchedAt time.Time           `json:"fetched_at"`
 	Problems  []graderapi.Problem `json:"problems"`
+}
+
+type updateCheckCache struct {
+	CheckedAt time.Time `json:"checked_at"`
 }
 
 func saveSession(session storedSession) error {
@@ -107,6 +112,40 @@ func questionCachePath() (string, error) {
 		return "", fmt.Errorf("find user cache directory: %w", err)
 	}
 	return filepath.Join(dir, applicationDir, questionsFilename), nil
+}
+
+func updateCheckPath() (string, error) {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("find user cache directory: %w", err)
+	}
+	return filepath.Join(dir, applicationDir, updateCheckFilename), nil
+}
+
+func loadUpdateCheckCache() (updateCheckCache, error) {
+	path, err := updateCheckPath()
+	if err != nil {
+		return updateCheckCache{}, err
+	}
+	var cache updateCheckCache
+	if err := readJSON(path, &cache); err != nil {
+		return updateCheckCache{}, err
+	}
+	if cache.CheckedAt.IsZero() {
+		return updateCheckCache{}, errors.New("update check cache is invalid")
+	}
+	return cache, nil
+}
+
+func saveUpdateCheckCache(cache updateCheckCache) error {
+	if cache.CheckedAt.IsZero() {
+		return errors.New("update check cache is invalid")
+	}
+	path, err := updateCheckPath()
+	if err != nil {
+		return err
+	}
+	return writePrivateJSON(path, cache)
 }
 
 func statementPDFPath(baseURL string, userID, problemID int) (string, error) {

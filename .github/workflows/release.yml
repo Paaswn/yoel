@@ -57,10 +57,11 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "release tag must be vMAJOR.MINOR.PATCH" >&2; exit 1; }
           mkdir -p dist/package
           output="yoel"
           if [ "$GOOS" = windows ]; then output="yoel.exe"; fi
-          CGO_ENABLED=0 go build -trimpath -o "dist/package/$output" ./cmd/yoel
+          CGO_ENABLED=0 go build -trimpath -ldflags "-X main.version=$VERSION" -o "dist/package/$output" ./cmd/yoel
           asset="yoel_${VERSION}_${GOOS}_${GOARCH}"
           if [ "$ARCHIVE" = tar.gz ]; then
             tar -C dist/package -czf "dist/${asset}.tar.gz" "$output"

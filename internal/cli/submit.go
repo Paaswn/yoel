@@ -24,8 +24,12 @@ const (
 var errInvalidSubmissionFilename = errors.New("source filename must match <positive-problem-id>.<extension>")
 
 func newSubmitCommand(sessions sessionProvider) *cobra.Command {
-	var long bool;
-	command :=  &cobra.Command{
+	return newSubmitCommandWithUpdateNotice(sessions, func(*cobra.Command) {})
+}
+
+func newSubmitCommandWithUpdateNotice(sessions sessionProvider, showUpdateNotice func(*cobra.Command)) *cobra.Command {
+	var long bool
+	command := &cobra.Command{
 		Use:   "submit [file-or-directory]",
 		Short: "Submit a source file or question directory",
 		Long:  "Submit a source file or recursively resolve it from a question directory. If a named file does not exist directly, the current directory is searched recursively for its exact basename.",
@@ -68,12 +72,15 @@ func newSubmitCommand(sessions sessionProvider) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			_, err = fmt.Fprintln(command.OutOrStdout(), renderSubmissionResult(long, submission))
-			return err
+			if _, err = fmt.Fprintln(command.OutOrStdout(), renderSubmissionResult(long, submission)); err != nil {
+				return err
+			}
+			showUpdateNotice(command)
+			return nil
 		},
 	}
 	command.Flags().BoolVar(&long, "long", false, "show additional details of submission response")
-	return command;
+	return command
 }
 
 var submissionCardStyle = lg.NewStyle().Border(lg.RoundedBorder()).Padding(0, 1)
@@ -125,13 +132,13 @@ func renderSubmissionResultShort(submission graderapi.Submission) string {
 		formatRow(tt, valueStyle, Row{"Attempt", submission.Number}),
 	}
 	if submission.GraderComment != nil && strings.TrimSpace(*submission.GraderComment) != "" {
-		var score string;
+		var score string
 		if submission.Points != nil {
 			score = strconv.FormatFloat(*submission.Points, 'f', 2, 64)
 		} else {
 			score = "-"
 		}
-		lines = append(lines, formatRow(tt, valueStyle, Row{"Score", fmt.Sprintf("[%v] / %v %% ",  *submission.GraderComment,  score)}))
+		lines = append(lines, formatRow(tt, valueStyle, Row{"Score", fmt.Sprintf("[%v] / %v %% ", *submission.GraderComment, score)}))
 	}
 	if submission.CompilerMessage != nil && strings.TrimSpace(*submission.CompilerMessage) != "" {
 		lines = append(lines, "Compiler message", indentSubmissionMessage(*submission.CompilerMessage))
@@ -144,7 +151,7 @@ func renderSubmissionResultShort(submission graderapi.Submission) string {
 	}
 	return submissionCardStyle.Render(lg.JoinVertical(lg.Left, lines...))
 }
-func renderSubmissionResult(long bool ,submission graderapi.Submission) string {
+func renderSubmissionResult(long bool, submission graderapi.Submission) string {
 	if !long {
 		return renderSubmissionResultShort(submission)
 	}

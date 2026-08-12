@@ -53,6 +53,17 @@ func TestNewRootCommandIncludesLoginCommand(t *testing.T) {
 	}
 }
 
+func TestNewRootCommandIncludesUpdateCommand(t *testing.T) {
+	root := NewRootCommandWithVersion("v0.2.0")
+	update, _, err := root.Find([]string{"update"})
+	if err != nil {
+		t.Fatalf("Find(update) error = %v", err)
+	}
+	if update == root || update.Use != "update" {
+		t.Fatalf("update command = %#v", update)
+	}
+}
+
 func TestLoginCommandCallsGraderAPI(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configDir)
