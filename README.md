@@ -20,9 +20,7 @@ Invoke-WebRequest https://raw.githubusercontent.com/Paaswn/yoel/master/scripts/i
 ### macOS & Linux
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Paaswn/yoel/master/scripts/install.sh -o /tmp/yoel-install.sh
-sh /tmp/yoel-install.sh
-
+curl -fsSL https://raw.githubusercontent.com/Paaswn/yoel/master/scripts/install.sh | sh
 ```
 
 The installers add their user-owned install directory to `PATH` when needed.
