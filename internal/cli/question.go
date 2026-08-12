@@ -19,6 +19,7 @@ import (
 	"charm.land/huh/v2/spinner"
 	"charm.land/lipgloss/v2"
 	lg "charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
 
@@ -52,17 +53,24 @@ func newQuestionListCommand(opener fileOpener, sessions sessionProvider) *cobra.
 				return err
 			}
 			var problems []graderapi.Problem
-			err = spinner.New().WithOutput(command.ErrOrStderr()).Title("Fetching questions...").ActionWithErr(
-				func(context context.Context) error {
-					problems, err = getQuestions(context, session, refresh, time.Now())
-					if err != nil {
-						return err
-					}
-					return nil
-				},
-			).Run()
-			if err != nil {
-				return err
+			if term.IsTerminal(os.Stderr.Fd()) {
+				err = spinner.New().WithInput(strings.NewReader("")).WithOutput(command.ErrOrStderr()).Title("Fetching questions...").ActionWithErr(
+					func(context context.Context) error {
+						problems, err = getQuestions(context, session, refresh, time.Now())
+						if err != nil {
+							return err
+						}
+						return nil
+					},
+				).Run()
+				if err != nil {
+					return err
+				}
+			} else {
+				problems, err = getQuestions(command.Context(), session, refresh, time.Now())
+				if err != nil {
+					return err
+				}
 			}
 			if err := refreshQuestionRegistry(problems); err != nil {
 				return fmt.Errorf("refresh question registry: %w", err)

@@ -15,6 +15,7 @@ import (
 
 	"charm.land/huh/v2/spinner"
 	lg "charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
 
@@ -70,18 +71,28 @@ func newSubmitCommandWithUpdateNotice(sessions sessionProvider, showUpdateNotice
 			if err != nil {
 				return err
 			}
-			err = spinner.New().WithOutput(command.ErrOrStderr()).ActionWithErr(func(context context.Context) error {
+			if term.IsTerminal(os.Stderr.Fd()) {
+				err := spinner.New().WithOutput(command.ErrOrStderr()).ActionWithErr(func(context context.Context) error {
+					submission, err = waitForSubmission(
+						context,
+						authenticatedClient,
+						submission.ID,
+						submissionPollInterval,
+						submissionPollTimeout,
+					)
+					return err
+				}).Title(fmt.Sprintf("Waiting for submission %d", submission.ID)).Run()
+				if err != nil {
+					return err
+				}
+			} else {
 				submission, err = waitForSubmission(
-					context,
+					command.Context(),
 					authenticatedClient,
 					submission.ID,
 					submissionPollInterval,
 					submissionPollTimeout,
 				)
-				return err
-			}).Title(fmt.Sprintf("Waiting for submission %d", submission.ID)).Run()
-			if err != nil {
-				return err
 			}
 			if interactiveTerminal(command) {
 				if err = renderSubmissionResultInteractive(command, resolved.Path, authenticatedClient, submission); err != nil {
