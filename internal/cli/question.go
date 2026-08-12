@@ -397,7 +397,15 @@ func showQuestions(command *cobra.Command, problems []graderapi.Problem) (grader
 	var selected int
 	options := make([]huh.Option[int], 0, len(problems))
 	for i, problem := range problems {
-		options = append(options, huh.NewOption(problem.Name, i))
+		var problemName string
+		if problem.BestScore == nil {
+			problemName = lg.NewStyle().Faint(true).Render("○", problem.Name)
+		} else if *problem.BestScore == 100 {
+			problemName = lg.NewStyle().Foreground(lg.Green).Render("●", problem.Name)
+		} else  {
+			problemName = lg.NewStyle().Foreground(lg.Yellow).Render("◐", problem.Name)
+		} 		
+		options = append(options, huh.NewOption(problemName, i))
 	}
 	form := huh.NewForm(
 		huh.NewGroup(
@@ -405,7 +413,7 @@ func showQuestions(command *cobra.Command, problems []graderapi.Problem) (grader
 				options...,
 			).
 				Value(&selected).Height(5),
-
+			
 			huh.NewNote().DescriptionFunc(func() string {
 				formatRow := func(row Row) string {
 					return formatRow(titleStyle, valueStyle, row)
@@ -413,7 +421,7 @@ func showQuestions(command *cobra.Command, problems []graderapi.Problem) (grader
 				prob := &problems[selected]
 				card := lg.JoinVertical(lg.Left,
 					headStyle.Foreground(lg.Magenta).Render(prob.FullName),
-					lg.NewStyle().Padding(0, 2, 0, 2).Border(lg.ASCIIBorder(), true).Render(
+					lg.NewStyle().Padding(0, 2, 0, 2).Border(lg.RoundedBorder(), true).Render(
 						lipgloss.JoinVertical(lg.Left,
 							lipgloss.JoinVertical(lg.Left,
 								headStyle.Render("Question"),

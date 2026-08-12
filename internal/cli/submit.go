@@ -189,11 +189,12 @@ func renderSubmissionResult(long bool, submission graderapi.Submission) string {
 }
 
 func resultAsSym(result string) string {
-	if result == "" || result == "wrong" {
-		return "✗"
+	if result == "correct" {
+		return "✔"
 	}
-	return "✔"
+	return "✗"
 }
+
 func renderSubmissionHeading(status string) string {
 	switch strings.ToLower(status) {
 	case "done":
