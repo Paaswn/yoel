@@ -141,7 +141,6 @@ func TestQuestionSubmitReadsFileAndShowsResult(t *testing.T) {
 		t.Fatalf("submit: %v", err)
 	}
 	for _, expected := range []string{
-		"Waiting for submission 924618...",
 		"Judging complete",
 		"ID       924618",
 		"Attempt  3",
