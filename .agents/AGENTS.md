@@ -10,6 +10,15 @@ The CLI currently owns login/session persistence, question cache and PDF
 downloads, source submission and result polling, and the `user` command. Do
 not move those product decisions into `internal/graderapi`.
 
+`internal/registry` stores Yoel's generated question index separately at
+`<user-config-dir>/yoel/questions.json`. It is keyed by stable grader problem
+ID and preserves remote name metadata plus real local question/source paths.
+Question list refreshes remote records; successful question creation binds its
+local paths. Submit resolves explicit files first, then exact registry keys
+(source filename, directory, ID, name, full name), and finally reports when it
+uses legacy recursive discovery. Do not move registry data into session storage,
+Viper config, or the `.yoel/` local replay cache.
+
 Interactive `yoel submit` results can locally replay eligible failed C++
 testcases. `internal/graderapi` only downloads the authenticated raw testcase
 input and expected output; `internal/runner` owns `g++` compilation, bounded

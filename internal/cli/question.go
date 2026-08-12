@@ -52,7 +52,7 @@ func newQuestionListCommand(opener fileOpener, sessions sessionProvider) *cobra.
 				return err
 			}
 			var problems []graderapi.Problem
-			err = spinner.New().Title("Fetching questions...").ActionWithErr(
+			err = spinner.New().WithInput(nil).WithOutput(command.OutOrStdout()).Title("Fetching questions...").ActionWithErr(
 				func(context context.Context) error {
 					problems, err = getQuestions(context, session, refresh, time.Now())
 					if err != nil {
@@ -63,6 +63,9 @@ func newQuestionListCommand(opener fileOpener, sessions sessionProvider) *cobra.
 			).Run()
 			if err != nil {
 				return err
+			}
+			if err := refreshQuestionRegistry(problems); err != nil {
+				return fmt.Errorf("refresh question registry: %w", err)
 			}
 			problem, err := showQuestions(command, problems)
 			if err != nil {
@@ -184,20 +187,35 @@ func createQuestion(command *cobra.Command, opener fileOpener, sessions sessionP
 		return fmt.Errorf("inspect question directory: %w", err)
 	}
 
+	sourcePath := ""
 	if problem.HasAttachment {
-		if err := createQuestionFromAttachment(command.Context(), session, problem, temporaryDir); err != nil {
+		singleSource, err := createQuestionFromAttachment(command.Context(), session, problem, temporaryDir)
+		if err != nil {
 			return err
 		}
+		if singleSource {
+			sourcePath = filepath.Join(problemDir, questionID+".cpp")
+		}
 	} else {
+		if lang == "" {
+			lang = "cpp"
+		}
 		if err := createQuestionNoAttachment(temporaryDir, questionID, lang); err != nil {
 			return err
 		}
+		sourcePath = filepath.Join(problemDir, questionID+"."+lang)
 	}
 	if err := createQuestionPDFReference(temporaryDir, problemDir, pdfPath); err != nil {
 		return err
 	}
 
-	return os.Rename(temporaryDir, problemDir)
+	if err := os.Rename(temporaryDir, problemDir); err != nil {
+		return fmt.Errorf("create question directory: %w", err)
+	}
+	if err := recordCreatedQuestion(problem, problemDir, sourcePath); err != nil {
+		return recordCreatedQuestionError(problem.ID, err)
+	}
+	return nil
 }
 func createQuestionNoAttachment(temporaryDir string, questionID string, lang string) error {
 	if lang == "" {
@@ -409,7 +427,7 @@ func showQuestions(command *cobra.Command, problems []graderapi.Problem) (grader
 	for i, problem := range problems {
 		var problemName string
 		if problem.BestScore == nil {
-			problemName = lg.NewStyle().Faint(true).Render("○", problem.Name)
+			problemName = lg.NewStyle().Render("○", problem.Name)
 		} else if *problem.BestScore == 100 {
 			problemName = lg.NewStyle().Foreground(lg.Green).Render("●", problem.Name)
 		} else  {

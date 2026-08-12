@@ -25,7 +25,7 @@ const (
 	maxAttachmentPathLength          = 240
 )
 
-func createQuestionFromAttachment(ctx context.Context, session storedSession, problem graderapi.Problem, temporaryDir string) error {
+func createQuestionFromAttachment(ctx context.Context, session storedSession, problem graderapi.Problem, temporaryDir string) (bool, error) {
 	// problemDir, err := questionDirectory(currentDir, problem.Name)
 	// if err != nil {
 	// 	return err
@@ -35,14 +35,14 @@ func createQuestionFromAttachment(ctx context.Context, session storedSession, pr
 	// } else if !os.IsNotExist(err) {
 	// 	return fmt.Errorf("inspect question directory: %w", err)
 	// }
-	// using 
+	// using
 	client, err := graderapi.NewClient(session.BaseURL, nil)
 	if err != nil {
-		return fmt.Errorf("question attachment: %w", err)
+		return false, fmt.Errorf("question attachment: %w", err)
 	}
 	attachment, err := client.WithToken(session.Token).DownloadProblemAttachment(ctx, problem.ID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	// using
 	// temporaryDir, err := os.MkdirTemp(currentDir, ".yoel-question-*")
@@ -53,15 +53,15 @@ func createQuestionFromAttachment(ctx context.Context, session storedSession, pr
 
 	files, err := extractQuestionAttachment(attachment.Data, temporaryDir)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if len(files) == 1 {
 		target := filepath.Join(temporaryDir, strconv.Itoa(problem.ID)+".cpp")
 		if err := renameSingleAttachmentSource(files[0], target, temporaryDir); err != nil {
-			return err
+			return false, err
 		}
 		if err := removeReadPDFConflicts(temporaryDir); err != nil {
-			return err
+			return false, err
 		}
 	}
 	// using
@@ -71,7 +71,7 @@ func createQuestionFromAttachment(ctx context.Context, session storedSession, pr
 	// if err := os.Rename(temporaryDir, problemDir); err != nil {
 	// 	return fmt.Errorf("create question directory: %w", err)
 	// }
-	return nil
+	return len(files) == 1, nil
 }
 
 func questionDirectory(currentDir, problemName string) (string, error) {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"yoel/internal/graderapi"
+	"yoel/internal/registry"
 
 	"github.com/spf13/cobra"
 )
@@ -198,5 +199,80 @@ func TestResolveSubmissionSourceReportsMissingFile(t *testing.T) {
 	}
 	if _, _, _, err := resolveSubmissionSource("673.cpp"); !errors.Is(err, errSubmissionSourceNotFound) {
 		t.Fatalf("error = %v, want errSubmissionSourceNotFound", err)
+	}
+}
+
+func TestResolveSubmissionSourceWithRegistryUsesRegisteredKeys(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, "cpp_basics_1")
+	sourcePath := filepath.Join(directory, "main.cpp")
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte("int main() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	questions := registry.Registry{
+		567: {
+			ID:            567,
+			Name:          "cpp_basics_1",
+			FullName:      "C++ Basics 1",
+			DirectoryPath: directory,
+			SourcePath:    sourcePath,
+		},
+	}
+	for _, key := range []string{"main.cpp", "cpp_basics_1", directory, "567", "C++ Basics 1"} {
+		resolved, err := resolveSubmissionSourceWithRegistry(key, questions)
+		if err != nil {
+			t.Fatalf("resolve %q: %v", key, err)
+		}
+		if resolved.Path != sourcePath || resolved.Filename != "main.cpp" || resolved.ProblemID != 567 || resolved.UsedLegacy {
+			t.Fatalf("resolve %q = %#v", key, resolved)
+		}
+	}
+}
+
+func TestResolveSubmissionSourceWithRegistryPreservesExplicitPathAndLegacyFallback(t *testing.T) {
+	root := t.TempDir()
+	directPath := filepath.Join(root, "567.cpp")
+	if err := os.WriteFile(directPath, []byte("int main() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	direct, err := resolveSubmissionSourceWithRegistry(directPath, registry.Registry{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if direct.Path != directPath || direct.ProblemID != 567 || direct.UsedLegacy {
+		t.Fatalf("direct = %#v", direct)
+	}
+
+	searchRoot := t.TempDir()
+	t.Chdir(searchRoot)
+	legacyPath := filepath.Join(searchRoot, "nested", "673.cpp")
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacyPath, []byte("int main() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := resolveSubmissionSourceWithRegistry("673.cpp", registry.Registry{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy.Path != legacyPath || !legacy.UsedLegacy {
+		t.Fatalf("legacy = %#v", legacy)
+	}
+}
+
+func TestResolveSubmissionSourceWithRegistryDoesNotFallbackForKnownMissingOrStaleEntry(t *testing.T) {
+	questions := registry.Registry{
+		567: {ID: 567, Name: "remote-only"},
+		891: {ID: 891, Name: "stale", SourcePath: filepath.Join(t.TempDir(), "missing.cpp")},
+	}
+	if _, err := resolveSubmissionSourceWithRegistry("567", questions); !errors.Is(err, registry.ErrNoLocalSource) {
+		t.Fatalf("missing source error = %v", err)
+	}
+	if _, err := resolveSubmissionSourceWithRegistry("891", questions); !errors.Is(err, registry.ErrStaleSource) {
+		t.Fatalf("stale source error = %v", err)
 	}
 }

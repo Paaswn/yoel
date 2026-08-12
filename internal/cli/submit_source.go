@@ -6,7 +6,16 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"yoel/internal/registry"
 )
+
+type submissionSourceResolution struct {
+	Path       string
+	Filename   string
+	ProblemID  int
+	UsedLegacy bool
+}
 
 var (
 	errSubmissionSourceNotFound = errors.New("submission source file was not found")
@@ -59,6 +68,46 @@ func resolveSubmissionSource(argument string) (path string, filename string, pro
 		return "", "", 0, err
 	}
 	return path, filename, problemID, nil
+}
+
+func resolveSubmissionSourceWithRegistry(argument string, questions registry.Registry) (submissionSourceResolution, error) {
+	info, statErr := os.Stat(argument)
+	if statErr == nil && !info.IsDir() {
+		path, filename, problemID, err := resolveSubmissionSource(argument)
+		if err != nil {
+			return submissionSourceResolution{}, err
+		}
+		return submissionSourceResolution{Path: path, Filename: filename, ProblemID: problemID}, nil
+	}
+	if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+		return submissionSourceResolution{}, fmt.Errorf("inspect submission source: %w", statErr)
+	}
+
+	resolved, err := questions.Resolve(argument)
+	if err == nil {
+		return submissionSourceResolution{
+			Path:      resolved.SourcePath,
+			Filename:  filepath.Base(resolved.SourcePath),
+			ProblemID: resolved.Entry.ID,
+		}, nil
+	}
+	if !errors.Is(err, registry.ErrNotFound) {
+		if errors.Is(err, registry.ErrNoLocalSource) {
+			return submissionSourceResolution{}, fmt.Errorf("%w; run yoel question new --id <question-id> or submit an explicit file path", err)
+		}
+		return submissionSourceResolution{}, err
+	}
+
+	path, filename, problemID, err := resolveSubmissionSource(argument)
+	if err != nil {
+		return submissionSourceResolution{}, err
+	}
+	return submissionSourceResolution{
+		Path:       path,
+		Filename:   filename,
+		ProblemID:  problemID,
+		UsedLegacy: statErr != nil || info.IsDir(),
+	}, nil
 }
 
 func findSubmissionSourceInDirectory(directory string) (string, error) {

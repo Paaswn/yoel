@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"yoel/internal/graderapi"
+	"yoel/internal/registry"
 
 	"github.com/spf13/cobra"
 )
@@ -100,6 +101,14 @@ func TestQuestionNewExtractsSingleAttachmentSourceAndCreatesReadPDF(t *testing.T
 	}
 	if _, err := os.Stat(filepath.Join(problemDir, "template")); !os.IsNotExist(err) {
 		t.Fatalf("empty archive directory was not removed: %v", err)
+	}
+	questions, err := registry.LoadDefault()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := questions[673]
+	if entry.Name != "starter" || entry.FullName != "Starter Problem" || entry.DirectoryPath != problemDir || entry.SourcePath != filepath.Join(problemDir, "673.cpp") {
+		t.Fatalf("registry entry = %#v", entry)
 	}
 }
 

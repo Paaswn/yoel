@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"yoel/internal/graderapi"
+	"yoel/internal/registry"
 
 	"charm.land/huh/v2/spinner"
 	lg "charm.land/lipgloss/v2"
@@ -36,11 +37,20 @@ func newSubmitCommandWithUpdateNotice(sessions sessionProvider, showUpdateNotice
 		Long:  "Submit a source file or recursively resolve it from a question directory. If a named file does not exist directly, the current directory is searched recursively for its exact basename.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			sourcePath, filename, problemID, err := resolveSubmissionSource(args[0])
+			questions, err := registry.LoadDefault()
+			if err != nil {
+				return fmt.Errorf("load question registry: %w", err)
+			}
+			resolved, err := resolveSubmissionSourceWithRegistry(args[0], questions)
 			if err != nil {
 				return err
 			}
-			source, err := os.ReadFile(sourcePath)
+			if resolved.UsedLegacy {
+				if _, err := fmt.Fprintf(command.ErrOrStderr(), "Using legacy source discovery for %q.\n", args[0]); err != nil {
+					return err
+				}
+			}
+			source, err := os.ReadFile(resolved.Path)
 			if err != nil {
 				return fmt.Errorf("read source file: %w", err)
 			}
@@ -53,20 +63,20 @@ func newSubmitCommandWithUpdateNotice(sessions sessionProvider, showUpdateNotice
 				return fmt.Errorf("submit command: %w", err)
 			}
 			authenticatedClient := client.WithToken(session.Token)
-			submission, err := authenticatedClient.Submit(command.Context(), problemID, graderapi.SubmissionRequest{
+			submission, err := authenticatedClient.Submit(command.Context(), resolved.ProblemID, graderapi.SubmissionRequest{
 				Source:   string(source),
-				Filename: filename,
+				Filename: resolved.Filename,
 			})
 			if err != nil {
 				return err
 			}
-			err = spinner.New().ActionWithErr(func(context context.Context) error {
+			err = spinner.New().WithInput(nil).WithOutput(command.OutOrStdout()).ActionWithErr(func(context context.Context) error {
 				submission, err = waitForSubmission(
 					context,
-				authenticatedClient,
-				submission.ID,
-				submissionPollInterval,
-				submissionPollTimeout,
+					authenticatedClient,
+					submission.ID,
+					submissionPollInterval,
+					submissionPollTimeout,
 				)
 				return err
 			}).Title(fmt.Sprintf("Waiting for submission %d", submission.ID)).Run()
@@ -74,7 +84,7 @@ func newSubmitCommandWithUpdateNotice(sessions sessionProvider, showUpdateNotice
 				return err
 			}
 			if interactiveTerminal(command) {
-				if err = renderSubmissionResultInteractive(command, sourcePath, authenticatedClient, submission); err != nil {
+				if err = renderSubmissionResultInteractive(command, resolved.Path, authenticatedClient, submission); err != nil {
 					return err
 				}
 			} else {

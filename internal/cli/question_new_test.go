@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"yoel/internal/graderapi"
+	"yoel/internal/registry"
 
 	"github.com/spf13/cobra"
 )
@@ -66,6 +67,14 @@ func TestQuestionNewCreatesQuestionByListOrder(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(workingDirectory, "CPP-Basics-1")); !os.IsNotExist(err) {
 		t.Fatalf("first question was unexpectedly created: %v", err)
+	}
+	questions, err := registry.LoadDefault()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := questions[674]
+	if entry.Name != "CPP-Basics-2" || entry.FullName != "CPP Basics 2" || entry.DirectoryPath != problemDir || entry.SourcePath != filepath.Join(problemDir, "674.go") {
+		t.Fatalf("registry entry = %#v", entry)
 	}
 }
 
