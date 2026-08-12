@@ -1,12 +1,12 @@
-# Yoel
+# yoel
 
-Yoel is a cli client for [Chula's Computer Engineering Grader](https://grader.nattee.net/) written in Go. It is one of my learning project along with [Falling sand simulation](https://github.com/Paaswn/sandfall-sim). The only difference is that, I token-maxxing Yoel.
+yoel is a cli client for [Chula's Computer Engineering Grader](https://grader.nattee.net/) written in Go. It is one of my learning project along with [Falling sand simulation](https://github.com/Paaswn/sandfall-sim). The only difference is that, I token-maxxing yoel.
+Thanks to [cobra](https://github.com/spf13/cobra), [huh](https://github.com/charmbracelet/huh) and [lipgloss](https://github.com/charmbracelet/lipgloss), yoel will be one of the **easiest** and **prettiest** cli tool you will ever use.
 
-## Install
+## Installation
 
-The installers download a prebuilt Yoel release. You do not need Go, Git, a
-package manager, or administrator access. They support 64-bit Intel/AMD and
-ARM computers on Windows, macOS, and Linux.
+
+The installers download a prebuilt Yoel release. No dependencies needed. They support 64-bit Intel/AMD and ARM computers on Windows, macOS, and Linux.
 
 ### Windows
 
@@ -14,7 +14,6 @@ ARM computers on Windows, macOS, and Linux.
 $script = Join-Path $env:TEMP 'yoel-install.ps1'
 Invoke-WebRequest https://raw.githubusercontent.com/Paaswn/yoel/master/scripts/install.ps1 -OutFile $script
 & $script
-
 ```
 
 ### macOS & Linux
@@ -23,20 +22,59 @@ Invoke-WebRequest https://raw.githubusercontent.com/Paaswn/yoel/master/scripts/i
 curl -fsSL https://raw.githubusercontent.com/Paaswn/yoel/master/scripts/install.sh | sh
 ```
 
-The installers add their user-owned install directory to `PATH` when needed.
-Open a new terminal afterwards, then verify with `yoel --help`. Run the same
-installer again to replace Yoel with the latest stable release. To install a
-specific version, set `YOEL_VERSION`, for example `YOEL_VERSION=v0.1.0 sh
-/tmp/yoel-install.sh` on macOS/Linux or `$env:YOEL_VERSION='v0.1.0'; & $script`
-in PowerShell.
-
 Downloads are checked against the release SHA-256 checksums. If installation
 does not work, download the matching archive manually from the
 [Yoel Releases page](https://github.com/Paaswn/yoel/releases). Releases are not
 currently code-signed or macOS-notarized, so Windows SmartScreen or macOS
 Gatekeeper may show a warning; do not disable platform security protections.
 
-## Updates
+    
+## Usage/Examples
+
+```sh || pwsh
+# validate your installation
+yoel --help
+# on your first use of yoel use this command
+yoel login
+```
+### Creating a new grader question
+```sh || pwsh
+yoel question list # show interactive list of questions
+yoel question new 3 # will create a question based on positional order in grader's website
+yoel question new --id 680 # will create a question based on this id
+```
+<img width=600 src="https://raw.githubusercontent.com/Paaswn/yoel/refs/heads/master/usages/question.gif">
+
+### Result
+```sh
+.
+├── CPP-Basics-6/ # from choosing in `yoel question list` window
+│   ├── 673.cpp
+│   └── symlink_to_PDF
+└── CPP-Basics-3/  # from `yoel question new 3`
+    ├── 676.cpp
+    └── symlink_to_PDF
+```
+
+### Submitting to grader
+yoel submit your source file to grader by searching for provided keyword in local registry. By providing these supported keywords to `yoel submit <key>` 
+1. Qustion ID
+2. Question Name
+3. File Name
+```sh || pwsh
+yoel submit 680
+# or
+yoel submit CPP-Basics-7
+```
+
+> [!NOTE]
+> yoel will fallback to recursively find your source code under current working directory if the provided key doesn't exist in the registry
+
+If there are test cases provided from grader. yoel will automatically run failed test cases for you locally. You can inspect the input and result by pressing ENTER on a failed question.
+
+<img width=600 src="https://raw.githubusercontent.com/Paaswn/yoel/refs/heads/master/usages/submit.gif">
+
+## Updating
 
 Release builds can check and install the latest Yoel release with:
 
@@ -44,58 +82,9 @@ Release builds can check and install the latest Yoel release with:
 yoel update
 ```
 
-The command always asks for confirmation in an interactive terminal. After an
-interactive submission result, Yoel may show a once-per-day availability notice;
-set `YOEL_NO_UPDATE_CHECK=1` to disable those checks. Installations managed by a
-package manager should be updated by that manager instead (for example, `brew
-upgrade yoel` or `scoop update yoel`); Yoel does not try to detect or overwrite
-package-manager-owned binaries. For a custom installer directory, rerun the
-installer with `YOEL_INSTALL_DIR` set to that directory.
+> [!NOTE]
+> Yoel may show a once-per-day availability notice; set `YOEL_NO_UPDATE_CHECK=1` to disable those checks
 
-## Usage
-```sh || pwsh
-# validate your installation
-yoel --help
-# on your first use of yoel use this command
-yoel login
-```
-### Example
-```
-. (cwd)
-```
-```sh || pwsh
-# you can create a new quetion with question number ( follow grader's order )
-yoel question new 1
-# or pass a specific question's id
-yoel question new --id 674
-# or 
-yoel question list 
-```
-```sh
-.
-├── CPP-Basics-1/  # from `yoel question 1`
-│   ├── 673.cpp
-│   └── symlink_to_PDF
-├── CPP-Basics-2/ # from `yoel question --id 674`
-│   ├── 674.cpp
-│   └── symlink_to_PDF
-├── CPP-Basics-3/ # from choosing in `yoel question list` window
-│   ├── 676.cpp
-│   └── symlink_to_PDF
-```
+## LLM USAGE
 
-to submit a question back to grader
-```sh || pwsh
-# you can submit the folder of question
-yoel submit ExampleQustion
-# or a source file of question, yoel will automatically find your file under cwd
-yoel submit question_id.cpp
-# relative or absolute path also accepted
-yoel submit ExampleQuestion/example_id.cpp
-yoel submit /home/user/ExampleQuestion/example_id.cpp
-```
-Thanks to [cobra](https://github.com/spf13/cobra), [huh](https://github.com/charmbracelet/huh) and [lipgloss](https://github.com/charmbracelet/lipgloss), Yoel will be one of the **easiest** and **prettiest** cli tool you will ever use.
-
-## LLM Usage
-
-~90% of this repo was written by Codex, [see agent's stuffs](.agents). Afaik, I wrote `showQuestionList()`, some of its helper-functions inside [question.go](internal/cli/question.go), and this README.
+This repo was mainly written by Codex to achieve god-like development speed, [see agent's stuffs](.agents). My main work was on user's ui/ux, and this README. Codex handles tests, networking, and go's concurrency. However, I have a plan to revise all code generated by AI in v0.4.0, which will massively increase development time of this tool.
