@@ -10,6 +10,21 @@ The CLI currently owns login/session persistence, question cache and PDF
 downloads, source submission and result polling, and the `user` command. Do
 not move those product decisions into `internal/graderapi`.
 
+Interactive `yoel submit` results can locally replay eligible failed C++
+testcases. `internal/graderapi` only downloads the authenticated raw testcase
+input and expected output; `internal/runner` owns `g++` compilation, bounded
+concurrent execution, timeouts, output capture, and approximate comparison.
+The CLI coordinates those pieces through Bubble Tea messages so the Huh result
+selector remains responsive. Remote Cafe Grader verdicts always remain
+authoritative. Non-interactive submissions never execute local programs.
+
+Local replay supports `.cpp` with `g++ -std=c++17 -O2 -pipe`. It compiles once,
+runs at most `min(runtime.NumCPU(), 4)` cases concurrently, limits each case to
+five seconds and 256 KiB per output stream, and caches source-specific binaries
+and testcase artifacts under the question directory's ignored `.yoel/`
+directory. Do not broaden language support, checker claims, limits, cache
+layout, or automatic replay eligibility without owner review.
+
 Release builds inject `main.version` from a `vMAJOR.MINOR.PATCH` tag via
 `.github/workflows/release.yml`. Local builds use `dev`. The official release
 source is `Paaswn/yoel`; archives are named `yoel_<version>_<os>_<arch>` and

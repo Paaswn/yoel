@@ -40,7 +40,7 @@ func TestConfirmUpdateUsesHuhConfirmation(t *testing.T) {
 	}{
 		{name: "yes", input: "y\n", want: true},
 		{name: "no", input: "n\n", want: false},
-		{name: "default", input: "\n", want: true},
+		{name: "default", input: "\r", want: true},
 	}
 
 	for _, tt := range tests {

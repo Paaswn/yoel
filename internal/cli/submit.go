@@ -12,7 +12,6 @@ import (
 
 	"yoel/internal/graderapi"
 
-	"charm.land/huh/v2"
 	lg "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 )
@@ -73,8 +72,14 @@ func newSubmitCommandWithUpdateNotice(sessions sessionProvider, showUpdateNotice
 			if err != nil {
 				return err
 			}
-			if err = newRenderSubmissionResult(submission); err != nil {
-				return err
+			if interactiveTerminal(command) {
+				if err = newRenderSubmissionResult(command, sourcePath, authenticatedClient, submission); err != nil {
+					return err
+				}
+			} else {
+				if _, err := fmt.Fprintln(command.OutOrStdout(), renderSubmissionResult(long, submission)); err != nil {
+					return err
+				}
 			}
 			showUpdateNotice(command)
 			return nil
@@ -147,13 +152,16 @@ func renderSubmissionResultShort(submission graderapi.Submission) string {
 	lines = append(lines, headStyle.Render("Result"))
 	if len(submission.Evaluations) > 0 {
 		for i, evaluation := range submission.Evaluations {
-			lines = append(lines, formatRow(tt, valueStyle, Row{fmt.Sprintf("Test %v", i+1), resultAsSym(*evaluation.Result)}))
+			result := "-"
+			if evaluation.Result != nil {
+				result = resultAsSym(*evaluation.Result)
+			}
+			lines = append(lines, formatRow(tt, valueStyle, Row{fmt.Sprintf("Test %v", i+1), result}))
 		}
 	}
 	return submissionCardStyle.Render(lg.JoinVertical(lg.Left, lines...))
 }
-func newRenderSubmissionResult(submission graderapi.Submission) error {
-
+func renderSubmissionSummary(submission graderapi.Submission) string {
 	tt := titleStyle.Width(10)
 	lines := []string{
 		renderSubmissionHeading(submission.Status),
@@ -171,34 +179,7 @@ func newRenderSubmissionResult(submission graderapi.Submission) error {
 	if submission.CompilerMessage != nil && strings.TrimSpace(*submission.CompilerMessage) != "" {
 		lines = append(lines, "Compiler message", indentSubmissionMessage(*submission.CompilerMessage))
 	}
-	submissionResult := submissionCardStyle.Render(lg.JoinVertical(lg.Left, lines...))
-	if len(submission.Evaluations) == 0 {
-		println(submissionResult)
-		return nil
-	}
-	var options []huh.Option[graderapi.Evaluation]
-	for _, eval := range submission.Evaluations {
-		var test string
-		if eval.Result == nil {
-			test = "-"
-		} else if *eval.Result == "correct" {
-			test = lg.NewStyle().Foreground(lg.Green).Render("CORRECT")
-		} else {
-			test = lg.NewStyle().Foreground(lg.Red).Render(strings.ToUpper( *eval.Result ))
-		}
-		options = append(options, huh.NewOption(test, eval))
-	}
-	var chose graderapi.Evaluation
-	from := huh.NewForm(
-		huh.NewGroup(
-			huh.NewNote().Description( submissionResult),
-			huh.NewSelect[graderapi.Evaluation]().Title("Test Cases Result").Options(options...).Value(&chose),
-			huh.NewNote().DescriptionFunc(func() string {
-				return renderEvaluation(chose)
-			}, &chose),
-		),
-	)
-	return from.Run()
+	return submissionCardStyle.Render(lg.JoinVertical(lg.Left, lines...))
 }
 func renderSubmissionResult(long bool, submission graderapi.Submission) string {
 	if !long {
