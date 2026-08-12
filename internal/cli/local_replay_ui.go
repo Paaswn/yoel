@@ -41,6 +41,8 @@ func newSubmissionResultModel(submission graderapi.Submission, updates <-chan lo
 		huh.NewGroup(
 			huh.NewNote().Description(renderSubmissionSummary(submission)),
 			huh.NewSelect[int]().Title("Test Cases Result").Options(options...).Value(&model.selected),
+		),
+		huh.NewGroup(
 			huh.NewNote().DescriptionFunc(func() string {
 				return model.renderSelectedDetail(submission)
 			}, struct {
@@ -49,6 +51,7 @@ func newSubmissionResultModel(submission graderapi.Submission, updates <-chan lo
 			}{&model.selected, &model.revision}),
 		),
 	)
+	
 	model.form.SubmitCmd = tea.Quit
 	model.form.CancelCmd = tea.Quit
 	return model
@@ -84,12 +87,11 @@ func (m *submissionResultModel) renderSelectedDetail(submission graderapi.Submis
 	if m.selected < 0 || m.selected >= len(submission.Evaluations) {
 		return ""
 	}
-	detail := renderEvaluation(submission.Evaluations[m.selected])
 	state, exists := m.states[m.selected]
 	if !exists {
-		return detail
+		return ""
 	}
-	return detail + "\n\n" + renderLocalReplayState(state)
+	return renderLocalReplayState(state)
 }
 
 func waitForLocalReplay(updates <-chan localReplayEvent) tea.Cmd {
@@ -102,7 +104,7 @@ func waitForLocalReplay(updates <-chan localReplayEvent) tea.Cmd {
 	}
 }
 
-func newRenderSubmissionResult(command *cobra.Command, sourcePath string, client *graderapi.Client, submission graderapi.Submission) error {
+func renderSubmissionResultInteractive(command *cobra.Command, sourcePath string, client *graderapi.Client, submission graderapi.Submission) error {
 	if len(submission.Evaluations) == 0 {
 		_, err := fmt.Fprintln(command.OutOrStdout(), renderSubmissionSummary(submission))
 		return err
@@ -144,30 +146,45 @@ func renderEvaluationOption(evaluation graderapi.Evaluation) string {
 	if strings.EqualFold(*evaluation.Result, "correct") {
 		return lg.NewStyle().Foreground(lg.Green).Render("CORRECT")
 	}
-	return lg.NewStyle().Foreground(lg.Red).Render(strings.ToUpper(*evaluation.Result))
+	return lg.NewStyle().Foreground(lg.Red).Render(strings.ToUpper(*evaluation.Result) , "⏎")
 }
 
 func renderLocalReplayState(state localReplayState) string {
-	heading := "Local replay · " + string(state.Status)
+	local_detail := "Local replay · " + string(state.Status)
 	if state.Status == localReplayCompileFailed {
 		if strings.TrimSpace(state.CompilerOutput) == "" {
-			return heading
+			return local_detail
 		}
-		return heading + "\n\nCompiler output\n" + limitReplayDetail(state.CompilerOutput)
+		return local_detail + "\n\nCompiler output\n" + limitReplayDetail(state.CompilerOutput)
 	}
 	if state.Status != localReplayFinished || state.Result == nil {
-		return heading
+		return local_detail
 	}
 	result := *state.Result
-	heading = "Local replay · " + strings.ReplaceAll(localRunStatus(result), "_", " ")
-	sections := []string{heading}
-	sections = append(sections, "Input\n"+limitReplayDetail(string(state.Testcase.Input)))
-	sections = append(sections, "Expected\n"+limitReplayDetail(string(state.Testcase.Expected)))
-	sections = append(sections, "Got\n"+limitReplayDetail(string(result.Stdout)))
+	local_detail = "Local replay · " + strings.ReplaceAll(localRunStatus(result), "_", " ")
+	sections :=  lg.JoinHorizontal(lg.Top,
+					lg.NewStyle().Margin(0, 1).Render(lg.JoinVertical(lg.Center,
+						headStyle.Render("Input"),
+						limitReplayDetail(string(state.Testcase.Input)),
+					),),
+					lg.NewStyle().Margin(0, 1).Render(lg.JoinVertical(lg.Center,
+						headStyle.Render("Expected"),
+								limitReplayDetail(string(state.Testcase.Expected)),
+					),),
+					lg.NewStyle().Margin(0, 1).Render(lg.JoinVertical(lg.Center,
+											headStyle.Render("Got"),
+											limitReplayDetail(string(result.Stdout)),
+					),),
+				)
 	if len(result.Stderr) > 0 {
-		sections = append(sections, "Stderr\n"+limitReplayDetail(string(result.Stderr)))
+		section := lg.JoinVertical(lg.Center,
+			headStyle.Render("Stderr"),
+			limitReplayDetail(string(result.Stderr)),
+		)
+		sections = lg.JoinHorizontal(lg.Top, sections, section)
 	}
-	return strings.Join(sections, "\n\n")
+	desc := lg.JoinVertical(lg.Center, sections, lg.NewStyle().Margin(1, 0).Faint(true).Render(local_detail))
+	return desc
 }
 
 func limitReplayDetail(value string) string {

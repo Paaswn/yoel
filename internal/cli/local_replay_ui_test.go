@@ -23,7 +23,7 @@ func TestSubmissionResultModelKeepsSelectionWhileAsyncResultsArrive(t *testing.T
 	if model.selected != 1 {
 		t.Fatalf("selection = %d, want 1", model.selected)
 	}
-	if detail := model.renderSelectedDetail(submission); !strings.Contains(detail, "Testcase 22") || strings.Contains(detail, "Local replay") {
+	if detail := model.renderSelectedDetail(submission); detail != "" {
 		t.Fatalf("selected detail = %q", detail)
 	}
 
@@ -37,7 +37,7 @@ func TestSubmissionResultModelKeepsSelectionWhileAsyncResultsArrive(t *testing.T
 		},
 	}})
 	detail := model.renderSelectedDetail(submission)
-	for _, want := range []string{"Testcase 22", "Local replay · wrong approximate", "Input", "5", "Expected", "15", "Got", "14"} {
+	for _, want := range []string{"Local replay · wrong approximate", "Input", "5", "Expected", "15", "Got", "14"} {
 		if !strings.Contains(detail, want) {
 			t.Fatalf("detail = %q, want %q", detail, want)
 		}
