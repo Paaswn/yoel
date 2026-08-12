@@ -12,6 +12,7 @@ import (
 
 	"yoel/internal/graderapi"
 
+	"charm.land/huh/v2"
 	lg "charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 )
@@ -72,7 +73,7 @@ func newSubmitCommandWithUpdateNotice(sessions sessionProvider, showUpdateNotice
 			if err != nil {
 				return err
 			}
-			if _, err = fmt.Fprintln(command.OutOrStdout(), renderSubmissionResult(long, submission)); err != nil {
+			if err = newRenderSubmissionResult(submission); err != nil {
 				return err
 			}
 			showUpdateNotice(command)
@@ -150,6 +151,54 @@ func renderSubmissionResultShort(submission graderapi.Submission) string {
 		}
 	}
 	return submissionCardStyle.Render(lg.JoinVertical(lg.Left, lines...))
+}
+func newRenderSubmissionResult(submission graderapi.Submission) error {
+
+	tt := titleStyle.Width(10)
+	lines := []string{
+		renderSubmissionHeading(submission.Status),
+		formatRow(tt, valueStyle, Row{"Attempt", submission.Number}),
+	}
+	if submission.GraderComment != nil && strings.TrimSpace(*submission.GraderComment) != "" {
+		var score string
+		if submission.Points != nil {
+			score = strconv.FormatFloat(*submission.Points, 'f', 2, 64)
+		} else {
+			score = "-"
+		}
+		lines = append(lines, formatRow(tt, valueStyle, Row{"Score", fmt.Sprintf("[%v] / %v %% ", *submission.GraderComment, score)}))
+	}
+	if submission.CompilerMessage != nil && strings.TrimSpace(*submission.CompilerMessage) != "" {
+		lines = append(lines, "Compiler message", indentSubmissionMessage(*submission.CompilerMessage))
+	}
+	submissionResult := submissionCardStyle.Render(lg.JoinVertical(lg.Left, lines...))
+	if len(submission.Evaluations) == 0 {
+		println(submissionResult)
+		return nil
+	}
+	var options []huh.Option[graderapi.Evaluation]
+	for _, eval := range submission.Evaluations {
+		var test string
+		if eval.Result == nil {
+			test = "-"
+		} else if *eval.Result == "correct" {
+			test = lg.NewStyle().Foreground(lg.Green).Render("CORRECT")
+		} else {
+			test = lg.NewStyle().Foreground(lg.Red).Render(strings.ToUpper( *eval.Result ))
+		}
+		options = append(options, huh.NewOption(test, eval))
+	}
+	var chose graderapi.Evaluation
+	from := huh.NewForm(
+		huh.NewGroup(
+			huh.NewNote().Description( submissionResult),
+			huh.NewSelect[graderapi.Evaluation]().Title("Test Cases Result").Options(options...).Value(&chose),
+			huh.NewNote().DescriptionFunc(func() string {
+				return renderEvaluation(chose)
+			}, &chose),
+		),
+	)
+	return from.Run()
 }
 func renderSubmissionResult(long bool, submission graderapi.Submission) string {
 	if !long {
