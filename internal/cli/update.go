@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -182,19 +181,7 @@ func interactiveTerminal(command *cobra.Command) bool {
 }
 
 func confirmUpdate(command *cobra.Command) (bool, error) {
-	if _, err := fmt.Fprint(command.OutOrStdout(), "Update Yoel? [y/N] "); err != nil {
-		return false, err
-	}
-	answer, err := bufio.NewReader(command.InOrStdin()).ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
-		return false, err
-	}
-	switch strings.ToLower(strings.TrimSpace(answer)) {
-	case "y", "yes":
-		return true, nil
-	default:
-		return false, nil
-	}
+	return huhYesNo(command, "Update Yoel?")
 }
 
 func installerURLForPlatform(goos string) string {

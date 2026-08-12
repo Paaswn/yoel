@@ -76,20 +76,5 @@ func runLoginForm(command *cobra.Command) (string, string, error) {
 }
 
 func runReloginPrompt(command *cobra.Command) (bool, error) {
-	accepted := true
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewConfirm().
-				Title("Session expired. Log in again?").
-				Affirmative("Yes").
-				Negative("No").
-				Value(&accepted),
-		),
-	).
-		WithInput(command.InOrStdin()).
-		WithOutput(command.ErrOrStderr())
-	if err := form.RunWithContext(command.Context()); err != nil {
-		return false, err
-	}
-	return accepted, nil
+	return huhYesNo(command, "Session expired. Log in again?")
 }
