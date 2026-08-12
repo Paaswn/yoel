@@ -52,7 +52,7 @@ func newQuestionListCommand(opener fileOpener, sessions sessionProvider) *cobra.
 				return err
 			}
 			var problems []graderapi.Problem
-			err = spinner.New().WithInput(nil).WithOutput(command.ErrOrStderr()).Title("Fetching questions...").ActionWithErr(
+			err = spinner.New().WithOutput(command.ErrOrStderr()).Title("Fetching questions...").ActionWithErr(
 				func(context context.Context) error {
 					problems, err = getQuestions(context, session, refresh, time.Now())
 					if err != nil {

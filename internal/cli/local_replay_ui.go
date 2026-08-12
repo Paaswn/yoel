@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"yoel/internal/graderapi"
@@ -29,6 +30,7 @@ type submissionResultModel struct {
 }
 
 func newSubmissionResultModel(submission graderapi.Submission, updates <-chan localReplayEvent) *submissionResultModel {
+	submission = normalizeInteractiveSubmission(submission)
 	model := &submissionResultModel{
 		updates: updates,
 		states:  make(map[int]localReplayState),
@@ -129,6 +131,7 @@ func renderSubmissionResultInteractive(command *cobra.Command, sourcePath string
 		_, err := fmt.Fprintln(command.OutOrStdout(), renderSubmissionSummary(submission))
 		return err
 	}
+	submission = normalizeInteractiveSubmission(submission)
 
 	replayContext, cancel := context.WithCancel(command.Context())
 	defer cancel()
@@ -157,6 +160,31 @@ func renderSubmissionResultInteractive(command *cobra.Command, sourcePath string
 		return huh.ErrUserAborted
 	}
 	return nil
+}
+
+func normalizeInteractiveSubmission(submission graderapi.Submission) graderapi.Submission {
+	submission.Evaluations = append([]graderapi.Evaluation(nil), submission.Evaluations...)
+	sort.SliceStable(submission.Evaluations, func(left, right int) bool {
+		return submission.Evaluations[left].TestcaseID < submission.Evaluations[right].TestcaseID
+	})
+	if len(submission.Evaluations) > 0 {
+		pattern := evaluationResultPattern(submission.Evaluations)
+		submission.GraderComment = &pattern
+	}
+	return submission
+}
+
+func evaluationResultPattern(evaluations []graderapi.Evaluation) string {
+	var pattern strings.Builder
+	pattern.Grow(len(evaluations))
+	for _, evaluation := range evaluations {
+		if evaluation.Result != nil && strings.EqualFold(strings.TrimSpace(*evaluation.Result), "correct") {
+			pattern.WriteByte('P')
+		} else {
+			pattern.WriteByte('-')
+		}
+	}
+	return pattern.String()
 }
 
 func renderEvaluationOption(evaluation graderapi.Evaluation) string {

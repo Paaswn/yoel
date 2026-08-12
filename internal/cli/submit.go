@@ -70,7 +70,7 @@ func newSubmitCommandWithUpdateNotice(sessions sessionProvider, showUpdateNotice
 			if err != nil {
 				return err
 			}
-			err = spinner.New().WithInput(nil).WithOutput(command.OutOrStdout()).ActionWithErr(func(context context.Context) error {
+			err = spinner.New().WithOutput(command.ErrOrStderr()).ActionWithErr(func(context context.Context) error {
 				submission, err = waitForSubmission(
 					context,
 					authenticatedClient,

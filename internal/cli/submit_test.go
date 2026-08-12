@@ -128,7 +128,6 @@ func TestQuestionSubmitReadsFileAndShowsResult(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-
 	command := newRootCommand(func(_ *cobra.Command) (string, string, error) {
 		t.Fatal("submit unexpectedly prompted for credentials")
 		return "", "", nil

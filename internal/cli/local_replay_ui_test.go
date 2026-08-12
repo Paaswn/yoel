@@ -93,3 +93,47 @@ func TestSubmissionResultModelKeepsNavigationAndCancellationKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeInteractiveSubmissionKeepsPatternAndResultsInTestcaseOrder(t *testing.T) {
+	correct := "correct"
+	wrong := "wrong"
+	originalComment := "server order"
+	submission := graderapi.Submission{
+		GraderComment: &originalComment,
+		Evaluations: []graderapi.Evaluation{
+			{TestcaseID: 40, Result: &correct},
+			{TestcaseID: 10, Result: &correct},
+			{TestcaseID: 30, Result: &wrong},
+			{TestcaseID: 20, Result: &correct},
+		},
+	}
+
+	normalized := normalizeInteractiveSubmission(submission)
+	if normalized.GraderComment == nil || *normalized.GraderComment != "PP-P" {
+		t.Fatalf("result pattern = %v, want PP-P", normalized.GraderComment)
+	}
+	for index, testcaseID := range []int{10, 20, 30, 40} {
+		if normalized.Evaluations[index].TestcaseID != testcaseID {
+			t.Fatalf("evaluation %d testcase ID = %d, want %d", index, normalized.Evaluations[index].TestcaseID, testcaseID)
+		}
+	}
+	if submission.Evaluations[0].TestcaseID != 40 || *submission.GraderComment != originalComment {
+		t.Fatalf("original submission was mutated: %#v", submission)
+	}
+	if summary := renderSubmissionSummary(normalized); !strings.Contains(summary, "[PP-P]") {
+		t.Fatalf("summary = %q, want [PP-P]", summary)
+	}
+}
+
+func TestEvaluationResultPatternTreatsMissingAndNonCorrectResultsAsFailures(t *testing.T) {
+	correct := " Correct "
+	partial := "partial"
+	got := evaluationResultPattern([]graderapi.Evaluation{
+		{Result: &correct},
+		{Result: nil},
+		{Result: &partial},
+	})
+	if got != "P--" {
+		t.Fatalf("pattern = %q, want P--", got)
+	}
+}
