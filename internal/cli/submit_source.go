@@ -70,6 +70,23 @@ func resolveSubmissionSource(argument string) (path string, filename string, pro
 	return path, filename, problemID, nil
 }
 
+// resolveExplicitSubmissionSource accepts any regular source file. The explicit
+// question argument determines its destination, so its filename need not embed
+// a problem ID.
+func resolveExplicitSubmissionSource(argument string) (submissionSourceResolution, error) {
+	info, err := os.Stat(argument)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return submissionSourceResolution{}, fmt.Errorf("%w: %s", errSubmissionSourceNotFound, argument)
+		}
+		return submissionSourceResolution{}, fmt.Errorf("inspect submission source: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return submissionSourceResolution{}, fmt.Errorf("submission source %q is not a regular file", argument)
+	}
+	return submissionSourceResolution{Path: filepath.Clean(argument), Filename: filepath.Base(argument)}, nil
+}
+
 func resolveSubmissionSourceWithRegistry(argument string, questions registry.Registry) (submissionSourceResolution, error) {
 	info, statErr := os.Stat(argument)
 	if statErr == nil && !info.IsDir() {

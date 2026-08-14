@@ -254,13 +254,13 @@ func TestWaitForSubmissionHonorsCancellation(t *testing.T) {
 func TestRenderSubmissionResultShowsCompilerError(t *testing.T) {
 	message := "main.cpp:1: error: expected ';'\n    return 0"
 	output := renderSubmissionResult(true,
-	 graderapi.Submission{
-		ID:              924618,
-		Number:          3,
-		Language:        "cpp",
-		Status:          "compilation_error",
-		CompilerMessage: &message,
-	})
+		graderapi.Submission{
+			ID:              924618,
+			Number:          3,
+			Language:        "cpp",
+			Status:          "compilation_error",
+			CompilerMessage: &message,
+		})
 	for _, expected := range []string{"✗ Compilation failed", "Status   compilation_error", "Score    -", "Compiler message", "expected ';'"} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("output = %q, want %q", output, expected)
@@ -282,5 +282,44 @@ func TestSubmitCommandRejectsInvalidFilenameBeforeLoadingSession(t *testing.T) {
 	}
 	if sessionCalls != 0 {
 		t.Fatalf("session provider called %d times, want 0", sessionCalls)
+	}
+}
+
+func TestSubmitExplicitQuestionOverridesSourceFilename(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	sourcePath := filepath.Join(t.TempDir(), "main.cpp")
+	if err := os.WriteFile(sourcePath, []byte("int main() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	server := newCLITestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/problems":
+			_, _ = fmt.Fprintln(w, `[{"id":1142,"name":"segment-tree","full_name":"Segment Tree"}]`)
+		case "/api/v1/problems/1142/submissions":
+			w.WriteHeader(http.StatusCreated)
+			_, _ = fmt.Fprintln(w, `{"id":1,"number":1,"status":"submitted"}`)
+		case "/api/v1/submissions/1":
+			_, _ = fmt.Fprintln(w, `{"id":1,"problem_id":1142,"language":"cpp","submitted_at":"2030-01-02T03:04:05Z","status":"done","number":1,"evaluations":[]}`)
+		default:
+			t.Errorf("unexpected request = %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	if err := saveSession(storedSession{BaseURL: server.URL, Token: "fake-token", ExpiresAt: time.Now().Add(time.Hour), User: graderapi.User{ID: 7}}); err != nil {
+		t.Fatal(err)
+	}
+
+	command := newRootCommand(func(_ *cobra.Command) (string, string, error) {
+		t.Fatal("submit unexpectedly prompted for credentials")
+		return "", "", nil
+	})
+	command.SetOut(new(bytes.Buffer))
+	command.SetErr(new(bytes.Buffer))
+	command.SetArgs([]string{"submit", sourcePath, "segment"})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("submit explicit question: %v", err)
 	}
 }

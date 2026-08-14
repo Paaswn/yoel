@@ -18,7 +18,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestQuestionNewExtractsSingleAttachmentSourceAndCreatesReadPDF(t *testing.T) {
+func TestQuestionNewPreservesSingleAttachmentFilenameAndCreatesReadPDF(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	workingDirectory := t.TempDir()
@@ -32,8 +32,8 @@ func TestQuestionNewExtractsSingleAttachmentSourceAndCreatesReadPDF(t *testing.T
 			t.Errorf("Authorization = %q", got)
 		}
 		switch r.URL.Path {
-		case "/api/v1/problems/673":
-			_, _ = fmt.Fprintln(w, `{"id":673,"name":"starter","full_name":"Starter Problem","submission_count":0,"has_attachment":true,"submission_ids":[]}`)
+		case "/api/v1/problems":
+			_, _ = fmt.Fprintln(w, `[{"id":673,"name":"starter","full_name":"Starter Problem","has_attachment":true}]`)
 		case "/api/v1/problems/673/files/pdf":
 			w.Header().Set("Content-Type", "application/pdf")
 			_, _ = w.Write(pdf)
@@ -76,9 +76,9 @@ func TestQuestionNewExtractsSingleAttachmentSourceAndCreatesReadPDF(t *testing.T
 	}
 
 	problemDir := filepath.Join(workingDirectory, "starter")
-	source, err := os.ReadFile(filepath.Join(problemDir, "673.cpp"))
+	source, err := os.ReadFile(filepath.Join(problemDir, "template", "starter.cpp"))
 	if err != nil {
-		t.Fatalf("read renamed attachment source: %v", err)
+		t.Fatalf("read preserved attachment source: %v", err)
 	}
 	if got, want := string(source), "int main() { return 0; }\n"; got != want {
 		t.Fatalf("source = %q, want %q", got, want)
@@ -99,15 +99,15 @@ func TestQuestionNewExtractsSingleAttachmentSourceAndCreatesReadPDF(t *testing.T
 	if _, err := os.Stat(filepath.Join(workingDirectory, "673.cpp")); !os.IsNotExist(err) {
 		t.Fatalf("unexpected source in current directory: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(problemDir, "template")); !os.IsNotExist(err) {
-		t.Fatalf("empty archive directory was not removed: %v", err)
+	if info, err := os.Stat(filepath.Join(problemDir, "template")); err != nil || !info.IsDir() {
+		t.Fatalf("preserved attachment directory: %v", err)
 	}
 	questions, err := registry.LoadDefault()
 	if err != nil {
 		t.Fatal(err)
 	}
 	entry := questions[673]
-	if entry.Name != "starter" || entry.FullName != "Starter Problem" || entry.DirectoryPath != problemDir || entry.SourcePath != filepath.Join(problemDir, "673.cpp") {
+	if entry.Name != "starter" || entry.FullName != "Starter Problem" || entry.DirectoryPath != problemDir || entry.SourcePath != filepath.Join(problemDir, "template", "starter.cpp") {
 		t.Fatalf("registry entry = %#v", entry)
 	}
 }
@@ -155,7 +155,7 @@ func TestQuestionListExtractsSelectedAttachment(t *testing.T) {
 		t.Fatalf("question list: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(workingDirectory, "arrays", "42.cpp")); err != nil {
+	if _, err := os.Stat(filepath.Join(workingDirectory, "arrays", "starter.cpp")); err != nil {
 		t.Fatalf("stat extracted list source: %v", err)
 	}
 }

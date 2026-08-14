@@ -9,7 +9,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"unicode"
 
@@ -25,53 +24,20 @@ const (
 	maxAttachmentPathLength          = 240
 )
 
-func createQuestionFromAttachment(ctx context.Context, session storedSession, problem graderapi.Problem, temporaryDir string) (bool, error) {
-	// problemDir, err := questionDirectory(currentDir, problem.Name)
-	// if err != nil {
-	// 	return err
-	// }
-	// if _, err := os.Lstat(problemDir); err == nil {
-	// 	return fmt.Errorf("create question directory: %s already exists", problemDir)
-	// } else if !os.IsNotExist(err) {
-	// 	return fmt.Errorf("inspect question directory: %w", err)
-	// }
-	// using
+func createQuestionFromAttachment(ctx context.Context, session storedSession, problem graderapi.Problem, temporaryDir string) ([]string, error) {
 	client, err := graderapi.NewClient(session.BaseURL, nil)
 	if err != nil {
-		return false, fmt.Errorf("question attachment: %w", err)
+		return nil, fmt.Errorf("question attachment: %w", err)
 	}
 	attachment, err := client.WithToken(session.Token).DownloadProblemAttachment(ctx, problem.ID)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	// using
-	// temporaryDir, err := os.MkdirTemp(currentDir, ".yoel-question-*")
-	// if err != nil {
-	// 	return fmt.Errorf("create temporary question directory: %w", err)
-	// }
-	// defer os.RemoveAll(temporaryDir)
-
 	files, err := extractQuestionAttachment(attachment.Data, temporaryDir)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	if len(files) == 1 {
-		target := filepath.Join(temporaryDir, strconv.Itoa(problem.ID)+".cpp")
-		if err := renameSingleAttachmentSource(files[0], target, temporaryDir); err != nil {
-			return false, err
-		}
-		if err := removeReadPDFConflicts(temporaryDir); err != nil {
-			return false, err
-		}
-	}
-	// using
-	// if err := createQuestionPDFReference(temporaryDir, problemDir, pdfPath); err != nil {
-	// 	return err
-	// }
-	// if err := os.Rename(temporaryDir, problemDir); err != nil {
-	// 	return fmt.Errorf("create question directory: %w", err)
-	// }
-	return len(files) == 1, nil
+	return files, nil
 }
 
 func questionDirectory(currentDir, problemName string) (string, error) {

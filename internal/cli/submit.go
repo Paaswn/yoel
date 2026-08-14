@@ -33,16 +33,22 @@ func newSubmitCommand(sessions sessionProvider) *cobra.Command {
 func newSubmitCommandWithUpdateNotice(sessions sessionProvider, showUpdateNotice func(*cobra.Command)) *cobra.Command {
 	var long bool
 	command := &cobra.Command{
-		Use:   "submit [file-or-directory]",
+		Use:   "submit <file-or-directory> [question]",
 		Short: "Submit a source file or question directory",
-		Long:  "Submit a source file or recursively resolve it from a question directory. If a named file does not exist directly, the current directory is searched recursively for its exact basename.",
-		Args:  cobra.ExactArgs(1),
+		Long:  "Submit a source file or recursively resolve it from a question directory. Supplying a question explicitly overrides source-based question inference.",
+		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(command *cobra.Command, args []string) error {
-			questions, err := registry.LoadDefault()
-			if err != nil {
-				return fmt.Errorf("load question registry: %w", err)
+			var resolved submissionSourceResolution
+			var err error
+			if len(args) == 2 {
+				resolved, err = resolveExplicitSubmissionSource(args[0])
+			} else {
+				questions, loadErr := registry.LoadDefault()
+				if loadErr != nil {
+					return fmt.Errorf("load question registry: %w", loadErr)
+				}
+				resolved, err = resolveSubmissionSourceWithRegistry(args[0], questions)
 			}
-			resolved, err := resolveSubmissionSourceWithRegistry(args[0], questions)
 			if err != nil {
 				return err
 			}
@@ -58,6 +64,13 @@ func newSubmitCommandWithUpdateNotice(sessions sessionProvider, showUpdateNotice
 			session, err := sessions(command)
 			if err != nil {
 				return err
+			}
+			if len(args) == 2 {
+				problem, err := resolveProblem(command, session, args[1], false)
+				if err != nil {
+					return err
+				}
+				resolved.ProblemID = problem.ID
 			}
 			client, err := graderapi.NewClient(session.BaseURL, nil)
 			if err != nil {

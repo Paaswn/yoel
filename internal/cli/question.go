@@ -54,7 +54,7 @@ func newQuestionListCommand(opener fileOpener, sessions sessionProvider) *cobra.
 			}
 			var problems []graderapi.Problem
 			if term.IsTerminal(os.Stderr.Fd()) {
-				err = spinner.New().WithInput(strings.NewReader("")).WithOutput(command.ErrOrStderr()).Title("Fetching questions...").ActionWithErr(
+				err = spinner.New().WithOutput(command.ErrOrStderr()).Title("Fetching questions...").ActionWithErr(
 					func(context context.Context) error {
 						problems, err = getQuestions(context, session, refresh, time.Now())
 						if err != nil {
@@ -108,23 +108,23 @@ func newQuestionNewCommand(opener fileOpener, sessions sessionProvider) *cobra.C
 	var problemID int
 	var refresh bool
 	newCmd := &cobra.Command{
-		Use:   "new [order]",
-		Short: "Create a new question by list order or grader ID",
+		Use:   "new <query>",
+		Short: "Create a new question by ID, order, name, or tag",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			idProvided := command.Flags().Changed("id")
 			if (len(args) == 1) == idProvided {
-				return errors.New("provide either a question order or --id")
+				return errors.New("provide either a question query or --id")
 			}
-			order := 0
+			query := ""
 			if idProvided {
 				if problemID <= 0 {
 					return errors.New("question id must be a positive integer")
 				}
+				query = strconv.Itoa(problemID)
 			} else {
-				var err error
-				order, err = strconv.Atoi(args[0])
-				if err != nil || order <= 0 {
+				query = args[0]
+				if numericQuery, err := strconv.Atoi(query); err == nil && numericQuery <= 0 {
 					return errors.New("question order must be a positive integer")
 				}
 			}
@@ -132,26 +132,9 @@ func newQuestionNewCommand(opener fileOpener, sessions sessionProvider) *cobra.C
 			if err != nil {
 				return err
 			}
-
-			var problem graderapi.Problem
-			if idProvided {
-				client, err := graderapi.NewClient(session.BaseURL, nil)
-				if err != nil {
-					return fmt.Errorf("question new: %w", err)
-				}
-				problem, err = client.WithToken(session.Token).GetProblem(command.Context(), problemID)
-				if err != nil {
-					return err
-				}
-			} else {
-				problems, err := getQuestions(command.Context(), session, refresh, time.Now())
-				if err != nil {
-					return err
-				}
-				if order > len(problems) {
-					return fmt.Errorf("question order %d is out of range; %d questions are available", order, len(problems))
-				}
-				problem = problems[order-1]
+			problem, err := resolveProblem(command, session, query, refresh)
+			if err != nil {
+				return err
 			}
 			return createQuestion(command, opener, sessions, problem, lang)
 		},
@@ -197,12 +180,16 @@ func createQuestion(command *cobra.Command, opener fileOpener, sessions sessionP
 
 	sourcePath := ""
 	if problem.HasAttachment {
-		singleSource, err := createQuestionFromAttachment(command.Context(), session, problem, temporaryDir)
+		files, err := createQuestionFromAttachment(command.Context(), session, problem, temporaryDir)
 		if err != nil {
 			return err
 		}
-		if singleSource {
-			sourcePath = filepath.Join(problemDir, questionID+".cpp")
+		if len(files) == 1 {
+			relativePath, err := filepath.Rel(temporaryDir, files[0])
+			if err != nil {
+				return fmt.Errorf("resolve attachment source path: %w", err)
+			}
+			sourcePath = filepath.Join(problemDir, relativePath)
 		}
 	} else {
 		if lang == "" {
@@ -328,66 +315,25 @@ func getQuestions(ctx context.Context, session storedSession, refresh bool, now 
 }
 
 func resolveQuestionID(command *cobra.Command, sessions sessionProvider, session *storedSession, args []string, name string, refresh bool) (int, error) {
+	query := name
 	if len(args) == 1 {
-		id, err := strconv.Atoi(args[0])
-		if err != nil || id <= 0 {
-			return 0, errors.New("question id must be a positive integer")
+		query = args[0]
+		if id, err := strconv.Atoi(query); err == nil && id > 0 {
+			return id, nil
 		}
-		return id, nil
 	}
-
-	cache, cacheErr := loadQuestionCache()
-	cacheMatches := cacheErr == nil && cache.BaseURL == session.BaseURL && cache.UserID == session.User.ID
-	problems := cache.Problems
-	if refresh || !cacheMatches {
-		if !time.Now().Before(session.ExpiresAt) {
-			var err error
-			*session, err = sessions(command)
-			if err != nil {
-				return 0, err
-			}
-		}
+	if !time.Now().Before(session.ExpiresAt) {
 		var err error
-		problems, err = getQuestions(command.Context(), *session, true, time.Now())
+		*session, err = sessions(command)
 		if err != nil {
 			return 0, err
 		}
 	}
-
-	matchID, err := findQuestionID(problems, name)
-	if err != nil || matchID != 0 {
-		return matchID, err
+	problem, err := resolveProblem(command, *session, query, refresh)
+	if err != nil {
+		return 0, err
 	}
-	if !refresh && cacheMatches {
-		if !time.Now().Before(session.ExpiresAt) {
-			*session, err = sessions(command)
-			if err != nil {
-				return 0, err
-			}
-		}
-		problems, err = getQuestions(command.Context(), *session, true, time.Now())
-		if err != nil {
-			return 0, err
-		}
-		matchID, err = findQuestionID(problems, name)
-		if err != nil || matchID != 0 {
-			return matchID, err
-		}
-	}
-	return 0, fmt.Errorf("question named %q was not found", name)
-}
-
-func findQuestionID(problems []graderapi.Problem, name string) (int, error) {
-	var matchID int
-	for _, problem := range problems {
-		if strings.EqualFold(problem.Name, name) {
-			if matchID != 0 {
-				return 0, fmt.Errorf("question name %q is ambiguous", name)
-			}
-			matchID = problem.ID
-		}
-	}
-	return matchID, nil
+	return problem.ID, nil
 }
 
 func validCachedPDF(path string) bool {
@@ -439,7 +385,7 @@ func showQuestions(command *cobra.Command, problems []graderapi.Problem) (grader
 			problemName = lg.NewStyle().Render("○", problem.Name)
 		} else if *problem.BestScore == 100 {
 			problemName = lg.NewStyle().Foreground(lg.Green).Render("●", problem.Name)
-		} else  {
+		} else {
 			problemName = lg.NewStyle().Foreground(lg.Yellow).Render("◐", problem.Name)
 		}
 		options = append(options, huh.NewOption(problemName, i))

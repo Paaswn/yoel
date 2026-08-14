@@ -84,10 +84,10 @@ func TestQuestionNewRequiresEitherOrderOrID(t *testing.T) {
 		"order and ID":      {"2", "--id", "674"},
 		"zero order":        {"0"},
 		"negative order":    {"--", "-1"},
-		"non-integer order": {"second"},
-		"too many orders":   {"1", "2"},
-		"zero ID":           {"--id", "0"},
-		"negative ID":       {"--id", "-1"},
+
+		"too many orders": {"1", "2"},
+		"zero ID":         {"--id", "0"},
+		"negative ID":     {"--id", "-1"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			sessionCalls := 0

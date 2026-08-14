@@ -578,8 +578,8 @@ func TestQuestionNewCreatesSourceAndOpensPDF(t *testing.T) {
 			t.Errorf("Authorization = %q", got)
 		}
 		switch r.URL.Path {
-		case "/api/v1/problems/673":
-			_, _ = fmt.Fprintln(w, `{"id":673,"name":"arrays","full_name":"Array Problem","submission_count":0,"has_attachment":false,"submission_ids":[]}`)
+		case "/api/v1/problems":
+			_, _ = fmt.Fprintln(w, `[{"id":673,"name":"arrays","full_name":"Array Problem","has_attachment":false}]`)
 		case "/api/v1/problems/673/files/pdf":
 			if got := r.Header.Get("Accept"); got != "application/pdf" {
 				t.Errorf("Accept = %q", got)
