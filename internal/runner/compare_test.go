@@ -22,3 +22,34 @@ func TestCompareOutput(t *testing.T) {
 		})
 	}
 }
+
+func TestFirstOutputMismatch(t *testing.T) {
+	for name, test := range map[string]struct {
+		actual   string
+		expected string
+		want     *OutputMismatch
+	}{
+		"match":           {"one\n", "one\n", nil},
+		"near start":      {"x\ntwo\n", "one\ntwo\n", &OutputMismatch{Line: 1, Expected: "one", Actual: "x"}},
+		"middle":          {"one\nx\nthree\n", "one\ntwo\nthree\n", &OutputMismatch{Line: 2, Expected: "two", Actual: "x"}},
+		"near end":        {"one\ntwo\nx\n", "one\ntwo\nthree\n", &OutputMismatch{Line: 3, Expected: "three", Actual: "x"}},
+		"actual longer":   {"one\ntwo\n", "one\n", &OutputMismatch{Line: 2, ExpectedEnded: true, Actual: "two"}},
+		"expected longer": {"one\n", "one\ntwo\n", &OutputMismatch{Line: 2, ActualEnded: true, Expected: "two"}},
+		"empty actual":    {"", "one\n", &OutputMismatch{Line: 1, ActualEnded: true, Expected: "one"}},
+		"normalization":   {"one \r\n\r\n", "one\n", nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := FirstOutputMismatch([]byte(test.actual), []byte(test.expected))
+			if !sameMismatch(got, test.want) {
+				t.Fatalf("FirstOutputMismatch(%q, %q) = %#v, want %#v", test.actual, test.expected, got, test.want)
+			}
+		})
+	}
+}
+
+func sameMismatch(got, want *OutputMismatch) bool {
+	if got == nil || want == nil {
+		return got == want
+	}
+	return *got == *want
+}

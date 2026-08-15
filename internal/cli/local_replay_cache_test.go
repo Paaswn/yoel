@@ -76,6 +76,28 @@ func TestLocalReplayCacheRejectsCorruptMetadata(t *testing.T) {
 	}
 }
 
+func TestLocalReplayInputCachePersistsBeforeLocalExecution(t *testing.T) {
+	sourcePath := filepath.Join(t.TempDir(), "673.cpp")
+	testcase := runner.TestCase{ID: 11, Index: 0, Input: []byte("1\n2\n")}
+	if err := writeLocalReplayInputCache(sourcePath, 7, remoteEvaluationSnapshot{Status: "grader_error"}, testcase); err != nil {
+		t.Fatal(err)
+	}
+	data, err := readLocalReplayCache(sourcePath, 7, 11)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !data.Metadata.HasInput || data.Metadata.HasExpected || string(data.Input) != "1\n2\n" {
+		t.Fatalf("input cache = %#v", data)
+	}
+	if err := writeLocalReplayExpectedCache(sourcePath, 7, 11, []byte("3\n")); err != nil {
+		t.Fatal(err)
+	}
+	data, err = readLocalReplayCache(sourcePath, 7, 11)
+	if err != nil || !data.Metadata.HasExpected || string(data.Expected) != "3\n" {
+		t.Fatalf("expected cache = %#v, %v", data, err)
+	}
+}
+
 func TestLocalReplayCachePathsStayInsideQuestionDirectory(t *testing.T) {
 	questionDirectory := filepath.Join(t.TempDir(), "Question With Spaces")
 	sourcePath := filepath.Join(questionDirectory, "673.cpp")

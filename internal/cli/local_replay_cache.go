@@ -25,6 +25,10 @@ type localReplayMetadata struct {
 	ExitCode     int      `json:"exit_code"`
 	DurationMS   int64    `json:"duration_ms"`
 	TimedOut     bool     `json:"timed_out,omitempty"`
+	HasInput     bool     `json:"has_input,omitempty"`
+	HasExpected  bool     `json:"has_expected,omitempty"`
+	HasStdout    bool     `json:"has_stdout,omitempty"`
+	HasStderr    bool     `json:"has_stderr,omitempty"`
 }
 
 type localReplayCacheData struct {
@@ -73,6 +77,10 @@ func writeLocalReplayCache(sourcePath string, submissionID int, evaluation remot
 		ExitCode:     result.ExitCode,
 		DurationMS:   result.Duration.Milliseconds(),
 		TimedOut:     result.TimedOut,
+		HasInput:     true,
+		HasExpected:  true,
+		HasStdout:    true,
+		HasStderr:    true,
 	}
 	metadataBytes, err := json.Marshal(metadata)
 	if err != nil {
@@ -99,37 +107,107 @@ func writeLocalReplayCache(sourcePath string, submissionID int, evaluation remot
 	return nil
 }
 
+// writeLocalReplayInputCache makes downloaded testcase input available for
+// later inspection even if solution download, compilation, or execution fails.
+func writeLocalReplayInputCache(sourcePath string, submissionID int, evaluation remoteEvaluationSnapshot, testcase runner.TestCase) error {
+	directory, err := localReplayCacheDirectory(sourcePath, submissionID, testcase.ID)
+	if err != nil {
+		return err
+	}
+	metadata, err := loadLocalReplayMetadata(directory, testcase.ID)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	metadata.TestcaseID = testcase.ID
+	metadata.RemoteStatus = evaluation.Status
+	metadata.Score = evaluation.Score
+	metadata.RemoteTime = evaluation.Time
+	metadata.RemoteMemory = evaluation.Memory
+	metadata.HasInput = true
+	if err := writePrivateFile(filepath.Join(directory, "input.txt"), testcase.Input); err != nil {
+		return fmt.Errorf("write local replay input cache: %w", err)
+	}
+	return writeLocalReplayMetadata(directory, metadata)
+}
+
+func writeLocalReplayExpectedCache(sourcePath string, submissionID, testcaseID int, expected []byte) error {
+	directory, err := localReplayCacheDirectory(sourcePath, submissionID, testcaseID)
+	if err != nil {
+		return err
+	}
+	metadata, err := loadLocalReplayMetadata(directory, testcaseID)
+	if err != nil {
+		return err
+	}
+	if err := writePrivateFile(filepath.Join(directory, "expected.txt"), expected); err != nil {
+		return fmt.Errorf("write local replay expected cache: %w", err)
+	}
+	metadata.HasExpected = true
+	return writeLocalReplayMetadata(directory, metadata)
+}
+
 func readLocalReplayCache(sourcePath string, submissionID, testcaseID int) (localReplayCacheData, error) {
 	directory, err := localReplayCacheDirectory(sourcePath, submissionID, testcaseID)
 	if err != nil {
 		return localReplayCacheData{}, err
 	}
-	metadataBytes, err := readBoundedLocalFile(filepath.Join(directory, "meta.json"))
+	metadata, err := loadLocalReplayMetadata(directory, testcaseID)
 	if err != nil {
 		return localReplayCacheData{}, err
 	}
-	var data localReplayCacheData
-	decoder := json.NewDecoder(bytes.NewReader(metadataBytes))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&data.Metadata); err != nil || data.Metadata.TestcaseID != testcaseID {
-		return localReplayCacheData{}, errors.New("invalid local replay cache")
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return localReplayCacheData{}, errors.New("invalid local replay cache")
-	}
-	for filename, target := range map[string]*[]byte{
-		"input.txt":    &data.Input,
-		"expected.txt": &data.Expected,
-		"stdout.txt":   &data.Stdout,
-		"stderr.txt":   &data.Stderr,
+	data := localReplayCacheData{Metadata: metadata}
+	// Cache entries written before availability markers existed always contained
+	// the complete four-file set. Keep those existing private caches readable.
+	legacyComplete := !metadata.HasInput && !metadata.HasExpected && !metadata.HasStdout && !metadata.HasStderr
+	for _, file := range []struct {
+		name string
+		has  bool
+		to   *[]byte
+	}{
+		{"input.txt", metadata.HasInput, &data.Input},
+		{"expected.txt", metadata.HasExpected, &data.Expected},
+		{"stdout.txt", metadata.HasStdout, &data.Stdout},
+		{"stderr.txt", metadata.HasStderr, &data.Stderr},
 	} {
-		*target, err = readBoundedLocalFile(filepath.Join(directory, filename))
+		if !file.has && !legacyComplete {
+			continue
+		}
+		*file.to, err = readBoundedLocalFile(filepath.Join(directory, file.name))
 		if err != nil {
 			return localReplayCacheData{}, err
 		}
 	}
 	return data, nil
+}
+
+func loadLocalReplayMetadata(directory string, testcaseID int) (localReplayMetadata, error) {
+	metadataBytes, err := readBoundedLocalFile(filepath.Join(directory, "meta.json"))
+	if err != nil {
+		return localReplayMetadata{}, err
+	}
+	var metadata localReplayMetadata
+	decoder := json.NewDecoder(bytes.NewReader(metadataBytes))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&metadata); err != nil || metadata.TestcaseID != testcaseID {
+		return localReplayMetadata{}, errors.New("invalid local replay cache")
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return localReplayMetadata{}, errors.New("invalid local replay cache")
+	}
+	return metadata, nil
+}
+
+func writeLocalReplayMetadata(directory string, metadata localReplayMetadata) error {
+	data, err := json.Marshal(metadata)
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	if err := writePrivateFile(filepath.Join(directory, "meta.json"), data); err != nil {
+		return fmt.Errorf("write local replay cache: %w", err)
+	}
+	return nil
 }
 
 func readBoundedLocalFile(path string) ([]byte, error) {

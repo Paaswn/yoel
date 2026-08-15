@@ -40,6 +40,59 @@ func TestCoordinateLocalReplaySkipsAllCorrectSubmission(t *testing.T) {
 	}
 }
 
+func TestCoordinateLocalReplayFetchesInputForEveryNonCorrectEvaluation(t *testing.T) {
+	statuses := []string{"wrong", "runtime_error", "compilation_error", "grader_error", "partial"}
+	evaluations := make([]graderapi.Evaluation, 0, len(statuses))
+	for index, status := range statuses {
+		status := status
+		evaluations = append(evaluations, graderapi.Evaluation{TestcaseID: index + 1, Result: &status})
+	}
+	var inputCalls atomic.Int32
+	var compileCalls atomic.Int32
+	var cachedCalls atomic.Int32
+	deps := replayTestDependencies()
+	deps.downloadInput = func(context.Context, int) ([]byte, error) {
+		inputCalls.Add(1)
+		return []byte("input\n"), nil
+	}
+	deps.writeInputCache = func(string, int, remoteEvaluationSnapshot, runner.TestCase) error {
+		cachedCalls.Add(1)
+		return nil
+	}
+	deps.compile = func(context.Context, string, string) (runner.CompileResult, error) {
+		compileCalls.Add(1)
+		return runner.CompileResult{BinaryPath: "fake-binary"}, nil
+	}
+	coordinateLocalReplay(context.Background(), "673.cpp", graderapi.Submission{Evaluations: evaluations}, deps, func(localReplayEvent) {})
+	if inputCalls.Load() != int32(len(statuses)) || cachedCalls.Load() != int32(len(statuses)) {
+		t.Fatalf("input calls = %d, cached calls = %d, want %d", inputCalls.Load(), cachedCalls.Load(), len(statuses))
+	}
+	if compileCalls.Load() != 1 {
+		t.Fatalf("compile calls = %d, want 1 for locally runnable evaluations", compileCalls.Load())
+	}
+}
+
+func TestCoordinateLocalReplayFetchesInspectableInputForNonCPPSource(t *testing.T) {
+	wrong := "wrong"
+	var inputCalls atomic.Int32
+	var compileCalls atomic.Int32
+	deps := replayTestDependencies()
+	deps.downloadInput = func(context.Context, int) ([]byte, error) {
+		inputCalls.Add(1)
+		return []byte("input\n"), nil
+	}
+	deps.compile = func(context.Context, string, string) (runner.CompileResult, error) {
+		compileCalls.Add(1)
+		return runner.CompileResult{}, nil
+	}
+	coordinateLocalReplay(context.Background(), "673.go", graderapi.Submission{
+		Evaluations: []graderapi.Evaluation{{TestcaseID: 11, Result: &wrong}},
+	}, deps, func(localReplayEvent) {})
+	if inputCalls.Load() != 1 || compileCalls.Load() != 0 {
+		t.Fatalf("input calls = %d, compile calls = %d", inputCalls.Load(), compileCalls.Load())
+	}
+}
+
 func TestCoordinateLocalReplaySkipsCompilationWithoutTestcaseData(t *testing.T) {
 	wrong := "wrong"
 	var compileCalls atomic.Int32
@@ -142,6 +195,12 @@ func replayTestDependencies() localReplayDependencies {
 			return closedRunResults()
 		},
 		writeCache: func(string, int, remoteEvaluationSnapshot, runner.TestCase, runner.RunResult, string) error {
+			return nil
+		},
+		writeInputCache: func(string, int, remoteEvaluationSnapshot, runner.TestCase) error {
+			return nil
+		},
+		writeExpectedCache: func(string, int, int, []byte) error {
 			return nil
 		},
 	}

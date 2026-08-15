@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -10,6 +12,28 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 )
+
+func TestSubmissionResultModelUsesEForTestcaseInspection(t *testing.T) {
+	wrong := "wrong"
+	submission := graderapi.Submission{ID: 7, Evaluations: []graderapi.Evaluation{{TestcaseID: 11, Result: &wrong}}}
+	model := newSubmissionResultModelForReplay(context.Background(), filepath.Join(t.TempDir(), "673.cpp"), submission, nil, func(context.Context, int) ([]byte, error) {
+		return []byte("expected\n"), nil
+	})
+	model.states[0] = localReplayState{Status: localReplayInputReady, InputAvailable: true, Testcase: runner.TestCase{ID: 11, Input: []byte("input\n")}}
+	model.form.NextGroup()
+	_, command := model.Update(tea.KeyPressMsg(tea.Key{Code: 'e', Text: "e"}))
+	if command == nil {
+		t.Fatal("e did not start inspection preparation")
+	}
+	message := command()
+	prepared, ok := message.(inspectionPreparedMessage)
+	if !ok || prepared.err != nil || !prepared.state.ExpectedAvailable {
+		t.Fatalf("inspection message = %#v", message)
+	}
+	if model.form.State != huh.StateNormal {
+		t.Fatalf("form state = %v, want normal", model.form.State)
+	}
+}
 
 func TestSubmissionResultModelKeepsSelectionWhileAsyncResultsArrive(t *testing.T) {
 	wrong := "wrong"

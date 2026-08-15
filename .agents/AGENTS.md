@@ -27,6 +27,18 @@ The CLI coordinates those pieces through Bubble Tea messages so the Huh result
 selector remains responsive. Remote Cafe Grader verdicts always remain
 authoritative. Non-interactive submissions never execute local programs.
 
+For every non-`CORRECT` evaluation with a testcase ID, the interactive flow
+downloads and privately caches its input even when that verdict is not eligible
+for local execution. Existing local execution eligibility remains deliberately
+narrow. The detail view renders bounded statistics, previews, and first
+mismatch context; it never dumps large testcase content into the terminal.
+Pressing bare `e` in that detail view writes a private combined `inspection.txt`
+under that testcase's existing `.yoel/` cache entry and opens it using `VISUAL`,
+then `EDITOR`. Expected output is fetched lazily there if local replay did not
+need it. Keep raw data out of CLI errors and command arguments, retain the
+existing 4 MiB grader-download and 256 KiB execution-stream limits, and do not
+turn this inspector into a new non-interactive command without owner review.
+
 Local replay supports `.cpp` with `g++ -std=c++17 -O2 -pipe`. It compiles once,
 runs at most `min(runtime.NumCPU(), 4)` cases concurrently, limits each case to
 five seconds and 256 KiB per output stream, and caches source-specific binaries
