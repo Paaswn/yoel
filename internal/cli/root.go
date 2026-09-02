@@ -46,5 +46,7 @@ func newRootCommandWithDependenciesAndVersion(form loginForm, confirm reloginPro
 	root.AddCommand(newSubmitCommandWithUpdateNotice(sessions, func(command *cobra.Command) {
 		maybeShowUpdateNotice(command, updates)
 	}))
+	root.AddCommand(newQuestionListCommand(opener, sessions))
+	root.AddCommand(newQuestionNewCommand(opener, sessions))
 	return root
 }
