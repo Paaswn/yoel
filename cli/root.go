@@ -25,8 +25,12 @@ func NewRootCommandWithVersion(version string) *cobra.Command {
     login := newLoginCommand()
     login.GroupID = "user"
     list := newListCommand()
+    fetch := newFetchCommand()
+    new := newNewCommand()
     list.GroupID = "question"
-    root.AddCommand(login, list)
+    fetch.GroupID = "question"
+    new.GroupID = "question"
+    root.AddCommand(login, list, fetch, new)
     return root
 }
 
