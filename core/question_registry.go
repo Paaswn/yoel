@@ -192,17 +192,25 @@ func (r *Registry) QueryByName(name string) ([]ProblemLite, error) {
     var result []ProblemLite
     for rows.Next() {
         var p problemLite
-        err := rows.Scan(&p.id, &p.bestScore, &p.codeName, &p.prettyName, &p.sourcePath, &p.directoryPath)
-        if err != nil {
+        if err := rows.Scan(
+            &p.id,
+            &p.bestScore,
+            &p.codeName,
+            &p.prettyName,
+            &p.sourcePath,
+            &p.directoryPath,
+        ); err != nil {
             return nil, err
         }
+
         result = append(result, ProblemLite{
-            ID: p.id,
-            CodeName: p.codeName,
-            PrettyName: p.prettyName,
-            SourcePath: p.sourcePath.String,
+            ID:            p.id,
+            BestScore:     p.bestScore.Float64,
+            CodeName:      p.codeName,
+            PrettyName:    p.prettyName,
+            SourcePath:    p.sourcePath.String,
             DirectoryPath: p.directoryPath.String,
-            IsOnLocal: p.directoryPath.Valid,
+            IsOnLocal:     p.directoryPath.Valid,
         })
     }
     if err := rows.Err(); err != nil {
