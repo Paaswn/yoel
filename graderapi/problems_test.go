@@ -39,7 +39,7 @@ func TestListProblemsSendsAuthenticatedGETAndDecodesProblems(t *testing.T) {
 	if len(problems) != 2 {
 		t.Fatalf("len(problems) = %d", len(problems))
 	}
-	if problems[0].ID != 42 || problems[0].Name != "arrays" || problems[0].Difficulty == nil || *problems[0].Difficulty != 3 {
+	if problems[0].ID != 42 || problems[0].CodeName != "arrays" || problems[0].Difficulty == nil || *problems[0].Difficulty != 3 {
 		t.Fatalf("first problem = %#v", problems[0])
 	}
 	if problems[1].Difficulty != nil {
@@ -67,7 +67,7 @@ func TestGetProblemSendsAuthenticatedGETAndDecodesDetails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if problem.ID != 673 || problem.Name != "starter" || problem.FullName != "Starter Problem" || !problem.HasAttachment {
+	if problem.ID != 673 || problem.CodeName != "starter" || problem.PrettyName != "Starter Problem" || !problem.HasAttachment {
 		t.Fatalf("problem = %#v", problem)
 	}
 }

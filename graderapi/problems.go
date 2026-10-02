@@ -22,8 +22,8 @@ type Problem struct {
 	HasTestcase        bool              `json:"has_testcase"`
 	HasAttachment      bool              `json:"has_attachment"`
 	PermittedLanguages []ProblemLanguage `json:"permitted_languages"`
-	Name               string            `json:"name"`
-	FullName           string            `json:"full_name"`
+	CodeName               string            `json:"name"`
+	PrettyName           string            `json:"full_name"`
 }
 
 // ProblemLanguage identifies a language permitted for a problem.
@@ -59,7 +59,7 @@ func (c *Client) GetProblem(ctx context.Context, problemID int) (Problem, error)
 	if err := json.Unmarshal(body, &problem); err != nil {
 		return Problem{}, fmt.Errorf("get problem: %w: malformed response", ErrInvalidResponse)
 	}
-	if problem.ID != problemID || problem.Name == "" || problem.FullName == "" {
+	if problem.ID != problemID || problem.CodeName == "" || problem.PrettyName == "" {
 		return Problem{}, fmt.Errorf("get problem: %w: response is missing required fields", ErrInvalidResponse)
 	}
 	return problem, nil
