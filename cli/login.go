@@ -1,17 +1,24 @@
 package cli
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"os"
 
 	"charm.land/huh/v2"
-	gapi "github.com/Paaswn/yoel/graderapi"
+	"github.com/Paaswn/yoel/core"
 	"github.com/spf13/cobra"
-	"github.com/zalando/go-keyring"
 )
 
-const defaultGraderURL = "https://grader.nattee.net"
+func yesNoPrompt(cmd *cobra.Command, title string) bool {
+    var confirm bool 
+    huh.NewForm(
+        huh.NewGroup(
+            huh.NewConfirm().Title(title).Value(&confirm),
+        ),
+    ).WithInput(cmd.InOrStdin()).WithOutput(cmd.OutOrStdout()).RunWithContext(cmd.Context())
+    return confirm
+}
 
 func newLoginCommand() *cobra.Command {
     var graderURL string
@@ -20,42 +27,15 @@ func newLoginCommand() *cobra.Command {
             Short: "login to your account",
             Long:  "login to your account, session is saved inside your os keyring",
             RunE: func(command *cobra.Command, _ []string) error {
-                return loginAndSaveSession(command, graderURL)
+                return runLoginForm(command)
 		},
     }
-    command.Flags().StringVar(&graderURL, "base-url", defaultGraderURL, "grader API base URL")
+    command.Flags().StringVar(&graderURL, "base-url", core.DefaultGraderURL, "grader API base URL")
     return command
 }
 
-func loginAndSaveSession(command *cobra.Command, url string) error {
-    client, err := gapi.NewClient(url, nil)
-    if err != nil {
-        return err;
-    }
-    username, password, err := runLoginForm(command)
-    session, err := client.Login(command.Context(), username, password)
-    if err := saveSession(&session); err != nil {
-        return err
-    }
-    _, err = fmt.Fprintln(os.Stderr, "Succesfully Login")
-    return err;
-}
-
-func saveSession(session *gapi.Session) error {
-    dataStruct := SavedSession{
-        session.Token,
-        session.ExpiresAt,
-    }
-    data, err := json.Marshal(dataStruct)
-    if err != nil {
-        return err
-    }
-    keyring.Set(keyringName, userCode, string(data))
-    return nil
-}
-
-func runLoginForm(command *cobra.Command) (string, string, error) {
-	var username string
+func getUserPass(command *cobra.Command) (string, string, error) {
+    var username string
 	var password string
 	form := huh.NewForm(
 		huh.NewGroup(
@@ -65,8 +45,23 @@ func runLoginForm(command *cobra.Command) (string, string, error) {
 	).
 	WithInput(command.InOrStdin()).
 	WithOutput(command.ErrOrStderr())
-	if err := form.RunWithContext(command.Context()); err != nil {
-		return "", "", err
+	if err := form.Run(); err != nil {
+		return "", "" ,err
 	}
 	return username, password, nil
+}
+func runLoginForm(command *cobra.Command) error {
+    username, password, err := getUserPass(command)
+    if err != nil {
+        return err
+    }
+	ctx, cancel := context.WithTimeout(context.Background(), core.TimeOut)
+    defer cancel()
+    if err := core.LoginAndSaveSession(core.DefaultGraderURL, username, password, ctx); err != nil {
+        return err
+    }
+    if _, err := fmt.Fprintln(os.Stderr, "Login Successfully"); err != nil {
+        return err
+    }
+	return nil
 }
