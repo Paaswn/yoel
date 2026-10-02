@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 
-	"yoel/internal/cli"
+	"github.com/Paaswn/yoel/cli"
 )
 
 // version is set to a release tag by the release workflow. Local builds keep
@@ -12,7 +14,12 @@ import (
 var version = "dev"
 
 func main() {
-	if err := cli.NewRootCommandWithVersion(version).Execute(); err != nil {
+    ctx, stop := signal.NotifyContext(
+        context.Background(),
+        os.Interrupt,
+    )
+    defer stop()
+	if err := cli.NewRootCommandWithVersion(version).ExecuteContext(ctx); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
