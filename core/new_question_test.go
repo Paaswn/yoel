@@ -14,9 +14,9 @@ import (
 	gapi "github.com/Paaswn/yoel/graderapi"
 )
 
-func TestCreateQuestion(t *testing.T) {
+func TestCreateQuestionNoAttachment(t *testing.T) {
 	cwd := t.TempDir()
-	problem := ProblemLite{ID: 42, CodeName: "sample"}
+	problem := ProblemLite{ID: 42, CodeName: "sample", HasAttachment: false}
 	r := newRegistryForTest(t)
 	if err := r.Upsert(problem); err != nil {
 		t.Fatalf("Upsert() error = %v", err)
@@ -33,7 +33,7 @@ func TestCreateQuestion(t *testing.T) {
 	}
 
 	questionDir := filepath.Join(cwd, problem.CodeName)
-	assertFileMode(t, filepath.Join(questionDir, "42.id"), 0o000)
+	assertFileContents(t, filepath.Join(questionDir, "main.cpp"), []byte(yoelSourceFile), 0o755)
 	assertFileContents(t, filepath.Join(questionDir, "42.pdf"), []byte("%PDF-1.7 test content"), 0o444)
 	info, err := os.Stat(filepath.Join(questionDir, yoelHiddenDir))
 	if err != nil {

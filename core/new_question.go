@@ -35,13 +35,22 @@ func createQuestion(ctx context.Context, cwd string, problem ProblemLite, client
     if err != nil {
         return err
     }
-    idPath := filepath.Join(temp, strconv.Itoa(id)+".id")
-    if err = os.WriteFile(idPath, []byte(""), 0o000); err != nil {
-        return err
-    }
-    pdfPath := filepath.Join(temp, rawPDF.Filename)
+    pdfPath := filepath.Join(temp, strconv.Itoa(id)+".pdf")
     if err = os.WriteFile(pdfPath, rawPDF.Data, 0o444); err != nil {
         return err
+    }
+    if problem.HasAttachment {
+        attachment, err := getAttachment(ctx, client, id)
+        if err != nil {
+            return err
+        }
+        if err = extractQuestionIntoDir(temp, attachment); err != nil {
+            return err
+        }
+    } else {
+        if err = makeEmptySourceFile(temp); err != nil {
+            return err
+        }
     }
     hidDir := filepath.Join(temp, yoelHiddenDir)
     if err = os.Mkdir(hidDir, 0o755);err != nil {
@@ -50,4 +59,25 @@ func createQuestion(ctx context.Context, cwd string, problem ProblemLite, client
     truepath:= filepath.Join(cwd, problem.CodeName)
     reg.SetProblemPath(problem.ID, "", truepath)
     return os.Rename(temp, truepath)
+}
+
+func extractQuestionIntoDir(dir string, attachment gapi.ProblemFile) error {
+    return nil
+}
+
+const yoelSourceFile =
+`/*
+--- this file was automatically created by yoel ---
+*/
+
+#include <iostream>
+using namespace std;
+
+int main() {
+
+}
+`
+func makeEmptySourceFile(dir string) error {
+    sourceFile := filepath.Join(dir, "main.cpp")
+    return os.WriteFile(sourceFile, []byte(yoelSourceFile), 0o755);
 }
