@@ -4,8 +4,8 @@
 package core
 
 import (
-	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -22,7 +22,7 @@ import (
 func newRegistryForTest(t *testing.T) *Registry {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "registry.db")
-	r, err := newRegistry(dbPath)
+	r, err := NewRegistryWithPath(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestRegistryNewRegistryPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = r.Close() })
-	got, err := r.GetAllQuestions(SavedSession{})
+	got, err := r.GetAllQuestions()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestRegistryNewRegistryPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = reopened.Close() })
-	got, err = reopened.GetAllQuestions(SavedSession{})
+	got, err = reopened.GetAllQuestions()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestRegistryUpsert(t *testing.T) {
 		if err := r.Upsert(p); err != nil {
 			t.Fatal(err)
 		}
-		got, err := r.GetAllQuestions(SavedSession{})
+		got, err := r.GetAllQuestions()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -163,7 +163,7 @@ func TestRegistryUpsert(t *testing.T) {
 			t.Fatal(err)
 		}
 		updated.SourcePath, updated.DirectoryPath, updated.IsOnLocal = old.SourcePath, old.DirectoryPath, true
-		got, err := r.GetAllQuestions(SavedSession{})
+		got, err := r.GetAllQuestions()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -191,7 +191,7 @@ func TestRegistryQueries(t *testing.T) {
 	})
 	t.Run("missing ID", func(t *testing.T) {
 		got, err := r.QueryByID(999)
-		if !errors.Is(err, ProblemNotFound) || got != (ProblemLite{}) {
+		if !errors.Is(err, sql.ErrNoRows) || got != (ProblemLite{}) {
 			t.Errorf("QueryByID = %#v, %v; want zero value, ProblemNotFound", got, err)
 		}
 	})
@@ -213,12 +213,12 @@ func TestRegistryQueries(t *testing.T) {
 	})
 	t.Run("unmatched name", func(t *testing.T) {
 		got, err := r.QueryByName("missing")
-		if !errors.Is(err, ProblemNotFound) || len(got) != 0 {
+		if !errors.Is(err, ErrProblemNotFound) || len(got) != 0 {
 			t.Errorf("QueryByName = %#v, %v; want no records, ProblemNotFound", got, err)
 		}
 	})
 	t.Run("all records ordered by stored order", func(t *testing.T) {
-		got, err := r.GetAllQuestions(SavedSession{})
+		got, err := r.GetAllQuestions()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -238,7 +238,7 @@ func TestRegistryQueries(t *testing.T) {
 			t.Fatal(err)
 		}
 		assertRegistryProblems(t, matches, []ProblemLite{remote})
-		all, err := r.GetAllQuestions(SavedSession{})
+		all, err := r.GetAllQuestions()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -254,7 +254,7 @@ func TestRegistryMutations(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.SourcePath, p.DirectoryPath, p.IsOnLocal = "student.h", "arrays", true
-	got, err := r.GetAllQuestions(SavedSession{})
+	got, err := r.GetAllQuestions()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestRegistryMutations(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.BestScore = 100
-	got, err = r.GetAllQuestions(SavedSession{})
+	got, err = r.GetAllQuestions()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestRegistryMutations(t *testing.T) {
 	if err := r.UpdateProblemScore(999, 50); err != nil {
 		t.Fatal(err)
 	}
-	got, err = r.GetAllQuestions(SavedSession{})
+	got, err = r.GetAllQuestions()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,27 +301,13 @@ func TestRegistryClosedDatabaseErrors(t *testing.T) {
 		"score":  func() error { return r.UpdateProblemScore(42, 100) },
 		"ID":     func() error { _, err := r.QueryByID(42); return err },
 		"name":   func() error { _, err := r.QueryByName("arrays"); return err },
-		"all":    func() error { _, err := r.GetAllQuestions(SavedSession{}); return err },
+		"all":    func() error { _, err := r.GetAllQuestions(); return err },
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := operation(); err == nil {
 				t.Fatal("operation succeeded after Close")
 			}
 		})
-	}
-}
-
-func TestRegistryProblemNotFoundNotice(t *testing.T) {
-	// A file avoids pipe buffering and keeps stderr capture local to this test.
-	var buf bytes.Buffer
-	err := ProblemNotFoundNotice(&buf)
-	if !errors.Is(err, ProblemNotFound) {
-		t.Errorf("error = %v, want ProblemNotFound", err)
-	}
-	got := buf.String()
-	want := "Registry may be outdated. Try running 'yoel fetch' to update the registry\n"
-	if string(got) != want {
-		t.Errorf("stderr = %q, want %q", got, want)
 	}
 }
 
@@ -367,7 +353,7 @@ func TestRegistryUpdateAllQuestions(t *testing.T) {
 		}
 		local.CodeName, local.PrettyName, local.BestScore = "arrays", "Array Problem", 87.5
 		remote := ProblemLite{ID: 43, CodeName: "graphs", PrettyName: "Graph Problem"}
-		got, err := r.GetAllQuestions(SavedSession{})
+		got, err := r.GetAllQuestions()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -380,7 +366,7 @@ func TestRegistryUpdateAllQuestions(t *testing.T) {
 			t.Fatal(err)
 		}
 		local.BestScore = 100
-		got, err = r.GetAllQuestions(SavedSession{})
+		got, err = r.GetAllQuestions()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -392,7 +378,7 @@ func TestRegistryUpdateAllQuestions(t *testing.T) {
 		if err := refresh(r, client); err != nil {
 			t.Fatal(err)
 		}
-		got, err := r.GetAllQuestions(SavedSession{})
+		got, err := r.GetAllQuestions()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -433,7 +419,7 @@ func TestRegistryUpdateAllQuestions(t *testing.T) {
 			if strings.Contains(err.Error(), token) || strings.Contains(err.Error(), "fake-private-body") {
 				t.Error("error exposed private request or response data")
 			}
-			got, err := r.GetAllQuestions(SavedSession{})
+			got, err := r.GetAllQuestions()
 			if err != nil {
 				t.Fatal(err)
 			}
