@@ -19,7 +19,7 @@ func newNewCommand() *cobra.Command {
         Short: "Create a new question",
         Args:  cobra.ExactArgs(1),
         RunE: func(cmd *cobra.Command, args []string) error {
-            return newFunc(cmd, args[0])
+            return newFunc(cmd, args[0], core.CreateQuestion)
         },
     }
     command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
@@ -27,7 +27,7 @@ func newNewCommand() *cobra.Command {
     return command
 }
 
-func newFunc(cmd *cobra.Command, query string) error {
+func newFunc(cmd *cobra.Command, query string, resFunc resultFunc) error {
     id, parseError := strconv.Atoi(query)
     if parseError != nil && !errors.Is(parseError, strconv.ErrSyntax) {
         return parseError
@@ -55,7 +55,7 @@ func newFunc(cmd *cobra.Command, query string) error {
             }
             return err
         }
-        return core.CreateQuestion(cmd.Context(), session, problem, reg)
+        return resFunc(cmd.Context(), session, problem, reg)
     } else {
         problems, err := reg.QueryByName(query)
         if err != nil {
@@ -65,7 +65,7 @@ func newFunc(cmd *cobra.Command, query string) error {
             return err
         }
         if len(problems) == 1 {
-            return core.CreateQuestion(cmd.Context(), session, problems[0], reg)
+            return resFunc(cmd.Context(), session, problems[0], reg)
         }
         disableInteractive, err := cmd.Flags().GetBool("disable-interactive")
         if err != nil {
@@ -76,7 +76,7 @@ func newFunc(cmd *cobra.Command, query string) error {
             if err != nil {
                 return err
             }
-            return core.CreateQuestion(cmd.Context(), session, problem, reg)
+            return resFunc(cmd.Context(), session, problem, reg)
         } else {
             writer := bufio.NewWriterSize(os.Stdout, 4096)
             for _, q := range problems {
