@@ -17,6 +17,8 @@ func LoginAndSaveSession(url, username, password string, ctx context.Context) er
     if err != nil {
         return err;
     }
+    ctx, cancel := context.WithTimeout(context.Background(), TimeOut)
+       defer cancel()
     session, err := client.Login(ctx, username, password)
     if err != nil {
         return err
@@ -32,9 +34,17 @@ type SavedSession struct {
     Expires time.Time `json:"expire"`
 }
 
-const keyringName string = "yoel"
-const userCode string = "witcherFour"
+const (
+    keyringService string = "yoel"
+    keyringAccount string = "yoel-grader-session"
+)
 
+func saveData(data string) error {
+    return keyring.Set(keyringService, keyringAccount, data)
+}
+func loadData() (string, error) {
+    return keyring.Get(keyringService, keyringAccount)
+}
 func SaveSession(session *gapi.Session) error {
     dataStruct := SavedSession{
         session.Token,
@@ -44,13 +54,12 @@ func SaveSession(session *gapi.Session) error {
     if err != nil {
         return err
     }
-    keyring.Set(keyringName, userCode, string(data))
-    return nil
+    return saveData(string(data))
 }
 
 var SessionExpiredError = errors.New("session expired. Run yoel login")
-func LoadSession() ( SavedSession, error ) {
-    rawData, err := keyring.Get(keyringName, userCode)
+func LoadSession() (SavedSession, error) {
+    rawData, err := loadData()
     if err != nil {
         return SavedSession{}, err
     }
