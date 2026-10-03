@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -9,7 +9,6 @@ import (
 	"github.com/Paaswn/yoel/core"
 	"github.com/spf13/cobra"
 )
-
 func yesNoPrompt(cmd *cobra.Command, title string) bool {
     var confirm bool 
     huh.NewForm(
@@ -45,22 +44,24 @@ func getUserPass(command *cobra.Command) (string, string, error) {
 	).
 	WithInput(command.InOrStdin()).
 	WithOutput(command.ErrOrStderr())
+	if !isTTY(command) {
+		return "", "", errors.New("Login requires an interactive terminal")
+	}
 	if err := form.Run(); err != nil {
 		return "", "" ,err
 	}
 	return username, password, nil
 }
+
 func runLoginForm(command *cobra.Command) error {
     username, password, err := getUserPass(command)
     if err != nil {
         return err
     }
-	ctx, cancel := context.WithTimeout(context.Background(), core.TimeOut)
-    defer cancel()
-    if err := core.LoginAndSaveSession(core.DefaultGraderURL, username, password, ctx); err != nil {
+    if err := core.LoginAndSaveSession(core.DefaultGraderURL, username, password, command.Context()); err != nil {
         return err
     }
-    if _, err := fmt.Fprintln(os.Stderr, "Login Successfully"); err != nil {
+    if _, err := fmt.Fprintln(os.Stderr, "Login successfully"); err != nil {
         return err
     }
 	return nil
