@@ -1,10 +1,15 @@
 package core
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	gapi "github.com/Paaswn/yoel/graderapi"
 )
@@ -39,30 +44,101 @@ func createQuestion(ctx context.Context, cwd string, problem ProblemLite, client
     if err = os.WriteFile(pdfPath, rawPDF.Data, 0o444); err != nil {
         return err
     }
+    var source string
     if problem.HasAttachment {
         attachment, err := getAttachment(ctx, client, id)
         if err != nil {
             return err
         }
-        if err = extractQuestionIntoDir(temp, attachment); err != nil {
+        res_source, err := extractQuestionIntoDir(temp, attachment)
+        if err != nil {
             return err
         }
+        source = res_source
     } else {
-        if err = makeEmptySourceFile(temp); err != nil {
+        err := makeEmptySourceFile(temp)
+        if err != nil {
             return err
         }
+        source = "main.cpp"
     }
     hidDir := filepath.Join(temp, yoelHiddenDir)
     if err = os.Mkdir(hidDir, 0o755);err != nil {
         return err
     }
-    truepath:= filepath.Join(cwd, problem.CodeName)
-    reg.SetProblemPath(problem.ID, "", truepath)
-    return os.Rename(temp, truepath)
+    dirPath:= filepath.Join(cwd, problem.CodeName)
+    sourcePath := filepath.Join(dirPath, source)
+    reg.SetProblemPath(problem.ID, sourcePath, dirPath)
+    return os.Rename(temp, dirPath)
 }
 
-func extractQuestionIntoDir(dir string, attachment gapi.ProblemFile) error {
-    return nil
+func extractQuestionIntoDir(dir string, attachment gapi.ProblemFile) (string, error ) {
+	archive, err := zip.NewReader(bytes.NewReader(attachment.Data), int64(len(attachment.Data)))
+	if err != nil {
+		return "", err
+	}
+	var sourceName string
+	for _, entry := range archive.File {
+    	target := filepath.Join(dir, entry.Name)
+        rel, err := filepath.Rel(dir, target)
+        if err != nil {
+            return "", err
+        }
+        if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+            return "", fmt.Errorf("unsafe attachment path: %q", entry.Name)
+        }
+    	if entry.FileInfo().IsDir() {
+    		if err := os.MkdirAll(target, 0o755); err != nil {
+    			return "", err
+    		}
+    		continue
+    	}
+        if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+ 			return "", err
+  		}
+        reader, err := entry.Open()
+        if err != nil {
+			return "", err
+		}
+		if filepath.Base(target) == "main.h" && filepath.Base(sourceName) != "student.h" {
+            sourceName, err = filepath.Rel(dir, target)
+            if err != nil {
+                return "", err
+            }
+  		} else if filepath.Base(target) == "student.h" {
+            sourceName, err = filepath.Rel(dir, target)
+            if err != nil {
+                return "", err
+            }
+		} else if filepath.Base(sourceName) != "student.h"  && filepath.Base(sourceName) != "main.h" {
+    		sourceName, err = filepath.Rel(dir, target)
+            if err != nil {
+                return "", err
+            }
+		}
+		file, err := os.Create(target)
+        if err != nil {
+            reader.Close()
+            return "", err
+        }
+    		
+        _, copyErr := io.Copy(file, reader)
+    		
+        readerErr := reader.Close()
+        fileErr := file.Close()
+    		
+        if copyErr != nil {
+            return "", copyErr
+        }
+        if readerErr != nil {
+            return "", readerErr
+        }
+        if fileErr != nil {
+            return "", fileErr
+        }
+	}
+    
+    return sourceName, nil
 }
 
 const yoelSourceFile =
@@ -79,5 +155,9 @@ int main() {
 `
 func makeEmptySourceFile(dir string) error {
     sourceFile := filepath.Join(dir, "main.cpp")
-    return os.WriteFile(sourceFile, []byte(yoelSourceFile), 0o755);
+    if err := os.WriteFile(sourceFile, []byte(yoelSourceFile), 0o755); err != nil {
+        return err
+    }
+    
+    return nil
 }
