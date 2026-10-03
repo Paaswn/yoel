@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"os"
+	"io"
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
@@ -59,7 +59,7 @@ func renderQuestionLists(cmd *cobra.Command, args []string) error {
             return err
         }
     } else {
-        questions, err = reg.GetAllQuestions(session)
+        questions, err = reg.GetAllQuestions()
         if err != nil {
             return err
         }
@@ -67,9 +67,6 @@ func renderQuestionLists(cmd *cobra.Command, args []string) error {
     
     if err != nil {
         return err
-    }
-    if len(questions) == 0 {
-        return core.ProblemNotFoundNotice(cmd.ErrOrStderr())
     }
     disableInteractive, err := cmd.Flags().GetBool("disable-interactive")
     if err != nil {
@@ -82,7 +79,7 @@ func renderQuestionLists(cmd *cobra.Command, args []string) error {
         }
         return core.CreateQuestion(cmd.Context(), session, problem, reg)
     } else {
-        if err := questionListPrint(questions); err != nil {
+        if err := questionListPrint(cmd.OutOrStderr(), questions); err != nil {
             return err
         }
     }
@@ -118,8 +115,8 @@ func questionListInteractive(cmd *cobra.Command, questions []core.ProblemLite) (
     return questions[selected], nil
 }
 
-func questionListPrint(questions []core.ProblemLite) error {
-    writer := bufio.NewWriterSize(os.Stdout, 4096)
+func questionListPrint(w io.Writer, questions []core.ProblemLite) error {
+    writer := bufio.NewWriterSize(w, 4096)
     for _, q := range questions {
         writer.WriteString(q.CodeName)
         fmt.Fprint(writer, " " , q.ID)

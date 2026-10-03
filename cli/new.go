@@ -1,10 +1,7 @@
 package cli
 
 import (
-	"bufio"
 	"errors"
-	"fmt"
-	"os"
 	"strconv"
 
 	"github.com/Paaswn/yoel/core"
@@ -50,18 +47,12 @@ func newFunc(cmd *cobra.Command, query string, resFunc resultFunc) error {
     if parseError == nil {
         problem, err := reg.QueryByID(id)
         if err != nil {
-            if errors.Is(err, core.ProblemNotFound) {
-                return core.ProblemNotFoundNotice(cmd.ErrOrStderr())
-            }
             return err
         }
         return resFunc(cmd.Context(), session, problem, reg)
     } else {
         problems, err := reg.QueryByName(query)
         if err != nil {
-            if errors.Is(err, core.ProblemNotFound) {
-                return core.ProblemNotFoundNotice(cmd.ErrOrStderr())
-            }
             return err
         }
         if len(problems) == 1 {
@@ -78,13 +69,7 @@ func newFunc(cmd *cobra.Command, query string, resFunc resultFunc) error {
             }
             return resFunc(cmd.Context(), session, problem, reg)
         } else {
-            writer := bufio.NewWriterSize(os.Stdout, 4096)
-            for _, q := range problems {
-                writer.WriteString(q.CodeName)
-                fmt.Fprint(writer, " " , q.ID)
-                writer.WriteRune('\n')
-            }
-            if err := writer.Flush(); err != nil {
+            if err := questionListPrint(cmd.OutOrStdout(), problems); err != nil {
                 return err
             }
         }

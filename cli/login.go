@@ -3,7 +3,6 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	"charm.land/huh/v2"
 	"github.com/Paaswn/yoel/core"
@@ -61,7 +60,7 @@ func runLoginForm(command *cobra.Command) error {
     if err := core.LoginAndSaveSession(core.DefaultGraderURL, username, password, command.Context()); err != nil {
         return err
     }
-    if _, err := fmt.Fprintln(os.Stderr, "Login successfully"); err != nil {
+    if _, err := fmt.Fprintln(command.ErrOrStderr(), "Login successfully"); err != nil {
         return err
     }
 	return nil
