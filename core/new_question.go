@@ -68,8 +68,13 @@ func createQuestion(ctx context.Context, cwd string, problem ProblemLite, client
     }
     dirPath:= filepath.Join(cwd, problem.CodeName)
     sourcePath := filepath.Join(dirPath, source)
-    reg.SetProblemPath(problem.ID, sourcePath, dirPath)
-    return os.Rename(temp, dirPath)
+    if err := os.Rename(temp, dirPath); err != nil {
+        return err
+    }
+    if err := reg.SetProblemPath(problem.ID, sourcePath, dirPath); err != nil {
+        return err
+    }
+    return nil
 }
 
 func extractQuestionIntoDir(dir string, attachment gapi.ProblemFile) (string, error ) {
