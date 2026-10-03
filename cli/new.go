@@ -51,7 +51,7 @@ func newFunc(cmd *cobra.Command, query string) error {
         problem, err := reg.QueryByID(id)
         if err != nil {
             if errors.Is(err, core.ProblemNotFound) {
-                return core.ProblemNotFoundNotice()
+                return core.ProblemNotFoundNotice(cmd.ErrOrStderr())
             }
             return err
         }
@@ -60,7 +60,7 @@ func newFunc(cmd *cobra.Command, query string) error {
         problems, err := reg.QueryByName(query)
         if err != nil {
             if errors.Is(err, core.ProblemNotFound) {
-                return core.ProblemNotFoundNotice()
+                return core.ProblemNotFoundNotice(cmd.ErrOrStderr())
             }
             return err
         }

@@ -49,7 +49,7 @@ func renderQuestionLists(cmd *cobra.Command) error {
     defer r.Close()
     questions, err := r.GetAllQuestions(session)
     if len(questions) == 0 {
-        return core.ProblemNotFoundNotice()
+        return core.ProblemNotFoundNotice(cmd.ErrOrStderr())
     }
     disableInteractive, err := cmd.Flags().GetBool("disable-interactive")
     if err != nil {
