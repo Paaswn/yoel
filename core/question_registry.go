@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
 
 	gapi "github.com/Paaswn/yoel/graderapi"
-	"github.com/spf13/viper"
 	_ "modernc.org/sqlite"
 )
 
@@ -25,17 +25,20 @@ var (
 )
 const yoelCache = "yoel"
 const yoelDatabase = "yoel.db"
-func NewRegistry() ( *Registry, error) {
+func yoelNormalDBPath() ( string, error ) {
     configDir, err := os.UserConfigDir()
     if err != nil {
-        return nil, err
+        return "", err
     }
     dirPath := filepath.Join(configDir, yoelCache)
 
     if err := os.MkdirAll(dirPath, 0700); err != nil {
-        return nil, err
+        return "", err
     }
     dbPath := filepath.Join(dirPath, yoelDatabase)
+    return dbPath, nil
+}
+func newRegistry(dbPath string) ( *Registry, error) {
     db, err := sql.Open("sqlite", dbPath)
     if err != nil {
         return nil, err
@@ -50,6 +53,14 @@ func NewRegistry() ( *Registry, error) {
         db.Close()
         return nil, err
     }
+	return r, nil
+}
+func NewRegistry() ( *Registry, error) {
+    dbPath, err := yoelNormalDBPath()
+    if err != nil {
+        return nil, err
+    }
+    r, err := newRegistry(dbPath)
 	return r, nil
 }
 
@@ -88,30 +99,13 @@ func (r *Registry) init() error {
     return err
 }
 
-func (r *Registry) checkDatabaseAge() ( bool ,error ) {
-    configDir, err := os.UserConfigDir()
-    if err != nil {
-        return false, err
-    }
-    viper.SetConfigName("yoel")
-    viper.SetConfigType("json")
-    viper.AddConfigPath(configDir)
-
-    if err := viper.ReadInConfig(); err != nil {
-        return false, err
-    }
-    var metadata RegistryMetadata
-    if err := viper.Unmarshal(&metadata); err != nil {
-        return false, err
-    }
-    return time.Since(metadata.LastUpdate) > 24*time.Hour, nil
-}
 
 func (r *Registry) Upsert(p ProblemLite) error {
     _, err := r.db.Exec(`
         INSERT INTO problems (id, sort_order, best_score, code_name, pretty_name)
         VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
+            sort_order = excluded.sort_order,
             best_score = excluded.best_score,
             code_name = excluded.code_name,
             pretty_name = excluded.pretty_name
@@ -163,6 +157,7 @@ func (r *Registry) QueryByID(id int) (ProblemLite, error ) {
     }
     return ProblemLite{
         ID: p.id,
+        BestScore: p.bestScore.Float64,
         CodeName: p.codeName,
         PrettyName: p.prettyName,
         SourcePath: p.sourcePath.String,
@@ -222,12 +217,8 @@ func (r *Registry) QueryByName(name string) ([]ProblemLite, error) {
     return result, nil
 }
 
-func (r *Registry) UpdateAllQuestions(session SavedSession) error {
-    client, err := gapi.NewClient(DefaultGraderURL, nil )
-    if err != nil {
-        return err
-    }
-    ctx, cancel := context.WithTimeout(context.Background(), TimeOut)
+func (r *Registry) updateAllQuestions(ctx context.Context, session SavedSession, client *gapi.Client) error {
+    ctx, cancel := context.WithTimeout(ctx, TimeOut)
     defer cancel()
     questions, err := client.WithToken(session.Token).ListProblems(ctx)
     if err != nil {
@@ -253,6 +244,13 @@ func (r *Registry) UpdateAllQuestions(session SavedSession) error {
 
     }
     return nil
+}
+func (r *Registry) UpdateAllQuestions(ctx context.Context, session SavedSession) error {
+    client, err := gapi.NewClient(DefaultGraderURL, nil )
+    if err != nil {
+        return err
+    }
+    return r.updateAllQuestions(ctx, session, client)
 }
 
 func (r *Registry) GetAllQuestions(session SavedSession) ([]ProblemLite, error ) {
@@ -308,7 +306,7 @@ func (r *Registry) Close() error {
     return r.db.Close()
 }
 
-func ProblemNotFoundNotice() error{
-    fmt.Fprintln(os.Stderr, "Registry may be outdated. Try running 'yoel fetch' to update the registry")
+func ProblemNotFoundNotice(w io.Writer) error{
+    fmt.Fprintln(w, "Registry may be outdated. Try running 'yoel fetch' to update the registry")
     return ProblemNotFound
 }
