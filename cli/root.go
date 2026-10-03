@@ -1,9 +1,13 @@
 package cli
 
 import (
+	"os"
+
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
 func NewRootCommandWithVersion(version string) *cobra.Command {
+
     root := &cobra.Command {
         Use:           "yoel",
 		Short:         "A command-line client for Cafe Grader",
@@ -34,3 +38,8 @@ func NewRootCommandWithVersion(version string) *cobra.Command {
     return root
 }
 
+func isTTY(cmd *cobra.Command) bool {
+    f, ok := cmd.InOrStdin().(*os.File)
+    fout, fok := cmd.OutOrStdout().(*os.File)
+    return ok && term.IsTerminal(f.Fd()) && fok && term.IsTerminal(fout.Fd())
+}

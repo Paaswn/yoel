@@ -10,7 +10,6 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/Paaswn/yoel/core"
-	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
 
@@ -47,6 +46,7 @@ func renderQuestionLists(cmd *cobra.Command) error {
     if err != nil {
         return err
     }
+    defer r.Close()
     questions, err := r.GetAllQuestions(session)
     if len(questions) == 0 {
         return core.ProblemNotFoundNotice()
@@ -55,7 +55,7 @@ func renderQuestionLists(cmd *cobra.Command) error {
     if err != nil {
         return err
     }
-    if term.IsTerminal(os.Stdin.Fd()) && !disableInteractive {
+    if isTTY(cmd) && !disableInteractive {
         problem, err := questionListInteractive(cmd, questions)
         if err != nil {
             return err
@@ -73,11 +73,6 @@ func renderQuestionLists(cmd *cobra.Command) error {
 
 func questionListInteractive(cmd *cobra.Command, questions []core.ProblemLite) ( core.ProblemLite, error ) {
     var selected int
-    var (
-       	ColorGreen  = lipgloss.Color("#22C55E")
-       	ColorYellow = lipgloss.Color("#EAB308")
-        ColorRed = lipgloss.Color("#EF4444")
-    )
     maxRow, err := cmd.Flags().GetInt("max-row")
     if err != nil {
         return core.ProblemLite{}, err
@@ -85,36 +80,13 @@ func questionListInteractive(cmd *cobra.Command, questions []core.ProblemLite) (
     keymap := huh.NewDefaultKeyMap()
     keymap.Select.Down.SetKeys("j", "down", "ctrl+j")
     keymap.Select.Up.SetKeys("k", "up", "ctrl+k")
+    options := buildOptions(questions)
     form := huh.NewForm(
         huh.NewGroup(
             huh.NewSelect[int]().TitleFunc(func() string {
                 return questions[selected].PrettyName
             }, &selected).Options(
-                func() []huh.Option[int] {
-                    tmp := make( []huh.Option[int], 0,  len(questions))
-                    for i, q := range questions {
-                        prefixes := lipgloss.NewStyle()
-                        percentage := "-"
-                        if !q.IsOnLocal && q.BestScore == 0 {
-                            prefixes = prefixes.Faint(true)
-                        } else {
-                            bestScore := q.BestScore
-                            if (bestScore <= 0) {
-                                prefixes = prefixes.Foreground(ColorRed)
-                            } else if bestScore < 100 {
-                                prefixes = prefixes.Foreground(ColorYellow)
-                            } else {
-                                prefixes = prefixes.Foreground(ColorGreen)
-                            }
-                            percentage = fmt.Sprintf("%.2f%%", bestScore)
-                        }
-                        num := prefixes
-                        prefixes = prefixes.Width(7).MarginRight(1).Align(lipgloss.Right)
-                        prettyName := prefixes.Render(percentage) + num.Render( q.CodeName )
-                        tmp = append(tmp, huh.NewOption(prettyName, i))
-                    }
-                    return tmp
-                }()...,
+                options...
             ).Value(&selected).Height(maxRow),
         ),
     ).WithInput(cmd.InOrStdin()).WithOutput(cmd.OutOrStdout()).WithKeyMap(keymap)
@@ -138,4 +110,36 @@ func questionListPrint(questions []core.ProblemLite) error {
         return err
     }
     return nil
+}
+
+var (
+   	ColorGreen  = lipgloss.Color("#22C55E")
+   	ColorYellow = lipgloss.Color("#EAB308")
+    ColorRed = lipgloss.Color("#EF4444")
+)
+func buildOptions(questions []core.ProblemLite) []huh.Option[int] {
+    options := make( []huh.Option[int], 0,  len(questions))
+    for i, q := range questions {
+        prefixes := lipgloss.NewStyle()
+        percentage := "-"
+        if !q.IsOnLocal && q.BestScore == 0 {
+            prefixes = prefixes.Faint(true)
+        } else {
+            bestScore := q.BestScore
+            if (bestScore <= 0) {
+                prefixes = prefixes.Foreground(ColorRed)
+            } else if bestScore < 100 {
+                prefixes = prefixes.Foreground(ColorYellow)
+            } else {
+                prefixes = prefixes.Foreground(ColorGreen)
+            }
+            percentage = fmt.Sprintf("%.2f%%", bestScore)
+        }
+        num := prefixes
+        prefixes = prefixes.Width(7).MarginRight(1).Align(lipgloss.Right)
+        prettyName := prefixes.Render(percentage) + num.Render( q.CodeName )
+        options = append(options, huh.NewOption(prettyName, i))
+    }
+    return options
+    
 }
