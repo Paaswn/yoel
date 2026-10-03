@@ -3,8 +3,8 @@ package core
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -21,7 +21,7 @@ type Registry struct {
 }
 
 var (
-    ProblemNotFound = sql.ErrNoRows
+    ErrProblemNotFound = fmt.Errorf("Registry may be outdated. Try running 'yoel fetch' to update the registry: %w", sql.ErrNoRows)
 )
 const yoelCache = "yoel"
 const yoelDatabase = "yoel.db"
@@ -38,7 +38,7 @@ func yoelNormalDBPath() ( string, error ) {
     dbPath := filepath.Join(dirPath, yoelDatabase)
     return dbPath, nil
 }
-func newRegistry(dbPath string) ( *Registry, error) {
+func NewRegistryWithPath(dbPath string) ( *Registry, error) {
     db, err := sql.Open("sqlite", dbPath)
     if err != nil {
         return nil, err
@@ -61,7 +61,7 @@ func NewRegistry() ( *Registry, error) {
     if err != nil {
         return nil, err
     }
-    r, err := newRegistry(dbPath)
+    r, err := NewRegistryWithPath(dbPath)
     if err != nil {
         return nil, err
     }
@@ -162,6 +162,9 @@ func (r *Registry) QueryByID(id int) (ProblemLite, error ) {
         WHERE id = ?
     `, id).Scan(&p.id, &p.has_attachment,  &p.best_score, &p.code_name, &p.pretty_name, &p.source_path, &p.directory_path)
     if err != nil {
+        if errors.Is(err, sql.ErrNoRows) {
+            return ProblemLite{}, ErrProblemNotFound
+        }
         return ProblemLite{}, err
     }
     return ProblemLite{
@@ -225,7 +228,7 @@ func (r *Registry) QueryByName(name string) ([]ProblemLite, error) {
         return nil, err
     }
     if len(result) == 0 {
-        return nil, ProblemNotFound
+        return nil, ErrProblemNotFound
     }
     return result, nil
 }
@@ -267,7 +270,7 @@ func (r *Registry) UpdateAllQuestions(ctx context.Context, session SavedSession)
     return r.updateAllQuestions(ctx, client.WithToken(session.Token))
 }
 
-func (r *Registry) GetAllQuestions(session SavedSession) ([]ProblemLite, error ) {
+func (r *Registry) GetAllQuestions() ([]ProblemLite, error ) {
 
     rows, err := r.db.Query(`
             SELECT
@@ -320,9 +323,4 @@ func (r *Registry) GetAllQuestions(session SavedSession) ([]ProblemLite, error )
 }
 func (r *Registry) Close() error {
     return r.db.Close()
-}
-
-func ProblemNotFoundNotice(w io.Writer) error{
-    fmt.Fprintln(w, "Registry may be outdated. Try running 'yoel fetch' to update the registry")
-    return ProblemNotFound
 }
