@@ -55,7 +55,7 @@ func newFunc(cmd *cobra.Command, query string) error {
             }
             return err
         }
-        return core.CreateQuestion(cmd.Context(), session, problem)
+        return core.CreateQuestion(cmd.Context(), session, problem, reg)
     } else {
         problems, err := reg.QueryByName(query)
         if err != nil {
@@ -63,6 +63,9 @@ func newFunc(cmd *cobra.Command, query string) error {
                 return core.ProblemNotFoundNotice(cmd.ErrOrStderr())
             }
             return err
+        }
+        if len(problems) == 1 {
+            return core.CreateQuestion(cmd.Context(), session, problems[0], reg)
         }
         disableInteractive, err := cmd.Flags().GetBool("disable-interactive")
         if err != nil {
@@ -73,7 +76,7 @@ func newFunc(cmd *cobra.Command, query string) error {
             if err != nil {
                 return err
             }
-            return core.CreateQuestion(cmd.Context(), session, problem)
+            return core.CreateQuestion(cmd.Context(), session, problem, reg)
         } else {
             writer := bufio.NewWriterSize(os.Stdout, 4096)
             for _, q := range problems {
@@ -86,7 +89,5 @@ func newFunc(cmd *cobra.Command, query string) error {
             }
         }
     }
-    return nil           
+    return nil
 }
-
-

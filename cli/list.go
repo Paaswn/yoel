@@ -18,8 +18,9 @@ func newListCommand() *cobra.Command {
     command := &cobra.Command{
         Use:   "list",
         Short: "show list of questions from grader",
+        Args: cobra.MaximumNArgs(1),
         RunE: func(cmd *cobra.Command, args []string) error {
-            return renderQuestionLists(cmd)
+            return renderQuestionLists(cmd, args)
         },
     }
     command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
@@ -27,7 +28,7 @@ func newListCommand() *cobra.Command {
     return command
 }
 
-func renderQuestionLists(cmd *cobra.Command) error {
+func renderQuestionLists(cmd *cobra.Command, args []string) error {
     session, err := core.LoadSession()
     switch err {
         case nil:
@@ -41,12 +42,22 @@ func renderQuestionLists(cmd *cobra.Command) error {
         default:
             return err
     }
-    r, err := core.NewRegistry()
+    reg, err := core.NewRegistry()
     if err != nil {
         return err
     }
-    defer r.Close()
-    questions, err := r.GetAllQuestions(session)
+    defer reg.Close()
+    var filter string
+    var questions []core.ProblemLite
+    if len(args) > 0 {
+        filter = args[0]
+        questions, err = reg.QueryByName(filter)
+    } else {
+        questions, err = reg.GetAllQuestions(session)
+    }
+    if err != nil {
+        return err
+    }
     if len(questions) == 0 {
         return core.ProblemNotFoundNotice(cmd.ErrOrStderr())
     }
@@ -59,7 +70,7 @@ func renderQuestionLists(cmd *cobra.Command) error {
         if err != nil {
             return err
         }
-        return core.CreateQuestion(cmd.Context(), session, problem)
+        return core.CreateQuestion(cmd.Context(), session, problem, reg)
     } else {
         if err := questionListPrint(questions); err != nil {
             return err
@@ -77,6 +88,7 @@ func questionListInteractive(cmd *cobra.Command, questions []core.ProblemLite) (
     keymap := huh.NewDefaultKeyMap()
     keymap.Select.Down.SetKeys("j", "down", "ctrl+j")
     keymap.Select.Up.SetKeys("k", "up", "ctrl+k")
+    keymap.Quit.SetKeys("q", "ctrl+c")
     options := buildOptions(questions)
     form := huh.NewForm(
         huh.NewGroup(
