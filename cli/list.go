@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bufio"
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -60,9 +59,7 @@ func renderQuestionLists(cmd *cobra.Command) error {
         if err != nil {
             return err
         }
-        ctx, cancel := context.WithTimeout(cmd.Context(), core.TimeOut)
-        defer cancel()
-        return core.CreateQuestion(ctx, session, problem)
+        return core.CreateQuestion(cmd.Context(), session, problem)
     } else {
         if err := questionListPrint(questions); err != nil {
             return err
