@@ -48,6 +48,7 @@ func newRegistry(dbPath string) ( *Registry, error) {
         return nil, err
     }
 
+    db.SetMaxOpenConns(1)
     r := &Registry{db: db}
     if err := r.init(); err != nil {
         db.Close()

@@ -15,14 +15,15 @@ import (
 func newListCommand() *cobra.Command {
     var disableInteractive bool
     var maxRow int
+    var filter string
     command := &cobra.Command{
         Use:   "list",
         Short: "show list of questions from grader",
-        Args: cobra.MaximumNArgs(1),
         RunE: func(cmd *cobra.Command, args []string) error {
             return renderQuestionLists(cmd, args)
         },
     }
+    command.Flags().StringVarP(&filter, "filter", "f", "", "filter question name, great for scripting")
     command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
     command.Flags().IntVarP(&maxRow, "max-row", "m", 10, "maximum number of rows to display")
     return command
@@ -47,14 +48,23 @@ func renderQuestionLists(cmd *cobra.Command, args []string) error {
         return err
     }
     defer reg.Close()
-    var filter string
     var questions []core.ProblemLite
-    if len(args) > 0 {
-        filter = args[0]
+    if cmd.Flags().Changed("filter") {
+        filter, err := cmd.Flags().GetString("filter")
+        if err != nil {
+            return err
+        }
         questions, err = reg.QueryByName(filter)
+        if err != nil {
+            return err
+        }
     } else {
         questions, err = reg.GetAllQuestions(session)
+        if err != nil {
+            return err
+        }
     }
+    
     if err != nil {
         return err
     }
