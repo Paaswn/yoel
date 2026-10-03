@@ -26,6 +26,11 @@ func newRegistryForTest(t *testing.T) *Registry {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+    	if err := r.Close(); err != nil {
+            t.Errorf("closing registry: %v", err)
+        }
+	})
 	return r
 }
 
@@ -322,7 +327,7 @@ func TestRegistryProblemNotFoundNotice(t *testing.T) {
 
 func TestRegistryUpdateAllQuestions(t *testing.T) {
 	type refresher interface {
-		updateAllQuestions(context.Context, SavedSession, *gapi.Client) error
+		updateAllQuestions(context.Context, *gapi.Client) error
 	}
 	if _, ok := any(&Registry{}).(refresher); !ok {
 		t.Fatal("HTTP tests require updateAllQuestions(ctx context.Context, session SavedSession, client *gapi.Client) error; no request was sent")
@@ -348,7 +353,7 @@ func TestRegistryUpdateAllQuestions(t *testing.T) {
 		return client
 	}
 	refresh := func(r *Registry, client *gapi.Client) error {
-		return any(r).(refresher).updateAllQuestions(t.Context(), SavedSession{Token: token}, client)
+		return any(r).(refresher).updateAllQuestions(t.Context(), client.WithToken(token))
 	}
 	t.Run("scores ordering repeated refresh and preserved paths", func(t *testing.T) {
 		r := newRegistryForTest(t)

@@ -62,21 +62,26 @@ func NewRegistry() ( *Registry, error) {
         return nil, err
     }
     r, err := newRegistry(dbPath)
+    if err != nil {
+        return nil, err
+    }
 	return r, nil
 }
 
 type problemLite struct {
     id int
+    has_attachment bool
     sort_order int
-    bestScore sql.NullFloat64
-    codeName string
-    prettyName string
-    sourcePath sql.NullString // source path indicates file that will be sent to grader such as student.h or main.cpp
-    directoryPath sql.NullString
+    best_score sql.NullFloat64
+    code_name string
+    pretty_name string
+    source_path sql.NullString // source path indicates file that will be sent to grader such as student.h or main.cpp
+    directory_path sql.NullString
 }
 
 type ProblemLite struct {
     ID int
+    HasAttachment bool
     SortOrder int
     BestScore float64
     CodeName string
@@ -89,6 +94,7 @@ func (r *Registry) init() error {
     _, err := r.db.Exec(`
         CREATE TABLE IF NOT EXISTS problems (
         id INTEGER PRIMARY KEY,
+        has_attachment INTEGER NOT NULL DEFAULT 0,
         sort_order INTEGER NOT NULL,
         best_score REAL,
         code_name TEXT NOT NULL,
@@ -103,15 +109,17 @@ func (r *Registry) init() error {
 
 func (r *Registry) Upsert(p ProblemLite) error {
     _, err := r.db.Exec(`
-        INSERT INTO problems (id, sort_order, best_score, code_name, pretty_name)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO problems (id, has_attachment, sort_order, best_score, code_name, pretty_name)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
+            has_attachment = excluded.has_attachment,
             sort_order = excluded.sort_order,
             best_score = excluded.best_score,
             code_name = excluded.code_name,
             pretty_name = excluded.pretty_name
         `,
         p.ID,
+        p.HasAttachment,
         p.SortOrder,
         p.BestScore,
         p.CodeName,
@@ -149,21 +157,22 @@ func (r *Registry) UpdateProblemScore(id int, score float64) error {
 func (r *Registry) QueryByID(id int) (ProblemLite, error ) {
     var p problemLite
     err := r.db.QueryRow(`
-        SELECT id, best_score, code_name, pretty_name, source_path, directory_path
+        SELECT id, has_attachment, best_score, code_name, pretty_name, source_path, directory_path
         FROM problems
         WHERE id = ?
-    `, id).Scan(&p.id, &p.bestScore, &p.codeName, &p.prettyName, &p.sourcePath, &p.directoryPath)
+    `, id).Scan(&p.id, &p.has_attachment,  &p.best_score, &p.code_name, &p.pretty_name, &p.source_path, &p.directory_path)
     if err != nil {
         return ProblemLite{}, err
     }
     return ProblemLite{
         ID: p.id,
-        BestScore: p.bestScore.Float64,
-        CodeName: p.codeName,
-        PrettyName: p.prettyName,
-        SourcePath: p.sourcePath.String,
-        DirectoryPath: p.directoryPath.String,
-        IsOnLocal: p.directoryPath.Valid,
+        HasAttachment: p.has_attachment,
+        BestScore: p.best_score.Float64,
+        CodeName: p.code_name,
+        PrettyName: p.pretty_name,
+        SourcePath: p.source_path.String,
+        DirectoryPath: p.directory_path.String,
+        IsOnLocal: p.directory_path.Valid,
     }, nil
 }
 
@@ -171,6 +180,7 @@ func (r *Registry) QueryByName(name string) ([]ProblemLite, error) {
     query := "%"+name+"%"
     rows, err := r.db.Query(`
         SELECT  id,
+                has_attachment,
                 best_score,
                 code_name,
                 pretty_name,
@@ -190,23 +200,25 @@ func (r *Registry) QueryByName(name string) ([]ProblemLite, error) {
         var p problemLite
         if err := rows.Scan(
             &p.id,
-            &p.bestScore,
-            &p.codeName,
-            &p.prettyName,
-            &p.sourcePath,
-            &p.directoryPath,
+            &p.has_attachment,
+            &p.best_score,
+            &p.code_name,
+            &p.pretty_name,
+            &p.source_path,
+            &p.directory_path,
         ); err != nil {
             return nil, err
         }
 
         result = append(result, ProblemLite{
             ID:            p.id,
-            BestScore:     p.bestScore.Float64,
-            CodeName:      p.codeName,
-            PrettyName:    p.prettyName,
-            SourcePath:    p.sourcePath.String,
-            DirectoryPath: p.directoryPath.String,
-            IsOnLocal:     p.directoryPath.Valid,
+            HasAttachment: p.has_attachment,
+            BestScore:     p.best_score.Float64,
+            CodeName:      p.code_name,
+            PrettyName:    p.pretty_name,
+            SourcePath:    p.source_path.String,
+            DirectoryPath: p.directory_path.String,
+            IsOnLocal:     p.directory_path.Valid,
         })
     }
     if err := rows.Err(); err != nil {
@@ -218,10 +230,8 @@ func (r *Registry) QueryByName(name string) ([]ProblemLite, error) {
     return result, nil
 }
 
-func (r *Registry) updateAllQuestions(ctx context.Context, session SavedSession, client *gapi.Client) error {
-    ctx, cancel := context.WithTimeout(ctx, TimeOut)
-    defer cancel()
-    questions, err := client.WithToken(session.Token).ListProblems(ctx)
+func (r *Registry) updateAllQuestions(ctx context.Context, client *gapi.Client) error {
+    questions, err := client.ListProblems(ctx)
     if err != nil {
         return err
     }
@@ -234,6 +244,7 @@ func (r *Registry) updateAllQuestions(ctx context.Context, session SavedSession,
         }
         p := ProblemLite{
             ID: q.ID,
+            HasAttachment: q.HasAttachment,
             SortOrder: i,
             BestScore: bestScore,
             CodeName: q.CodeName,
@@ -251,7 +262,9 @@ func (r *Registry) UpdateAllQuestions(ctx context.Context, session SavedSession)
     if err != nil {
         return err
     }
-    return r.updateAllQuestions(ctx, session, client)
+    ctx, cancel := context.WithTimeout(ctx, TimeOut)
+    defer cancel()
+    return r.updateAllQuestions(ctx, client.WithToken(session.Token))
 }
 
 func (r *Registry) GetAllQuestions(session SavedSession) ([]ProblemLite, error ) {
@@ -259,6 +272,7 @@ func (r *Registry) GetAllQuestions(session SavedSession) ([]ProblemLite, error )
     rows, err := r.db.Query(`
             SELECT
                 id,
+                has_attachment,
                 best_score,
                 code_name,
                 pretty_name,
@@ -279,23 +293,24 @@ func (r *Registry) GetAllQuestions(session SavedSession) ([]ProblemLite, error )
 
             if err := rows.Scan(
                 &p.id,
-                &p.bestScore,
-                &p.codeName,
-                &p.prettyName,
-                &p.sourcePath,
-                &p.directoryPath,
+                &p.has_attachment,
+                &p.best_score,
+                &p.code_name,
+                &p.pretty_name,
+                &p.source_path,
+                &p.directory_path,
             ); err != nil {
                 return nil, err
             }
 
             problems = append(problems, ProblemLite{
                 ID:            p.id,
-                BestScore:     p.bestScore.Float64,
-                CodeName:      p.codeName,
-                PrettyName:    p.prettyName,
-                SourcePath:    p.sourcePath.String,
-                DirectoryPath: p.directoryPath.String,
-                IsOnLocal:     p.directoryPath.Valid,
+                BestScore:     p.best_score.Float64,
+                CodeName:      p.code_name,
+                PrettyName:    p.pretty_name,
+                SourcePath:    p.source_path.String,
+                DirectoryPath: p.directory_path.String,
+                IsOnLocal:     p.directory_path.Valid,
             })
         }
         if err := rows.Err(); err != nil {
