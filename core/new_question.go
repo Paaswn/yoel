@@ -105,33 +105,23 @@ func extractQuestionIntoDir(dir string, attachment gapi.ProblemFile) (string, er
         if err != nil {
 			return "", err
 		}
-		if filepath.Base(target) == "main.h" && filepath.Base(sourceName) != "student.h" {
+		if validSourceName(target, sourceName) {
             sourceName, err = filepath.Rel(dir, target)
             if err != nil {
                 return "", err
             }
-  		} else if filepath.Base(target) == "student.h" {
-            sourceName, err = filepath.Rel(dir, target)
-            if err != nil {
-                return "", err
-            }
-		} else if filepath.Base(sourceName) != "student.h"  && filepath.Base(sourceName) != "main.h" {
-    		sourceName, err = filepath.Rel(dir, target)
-            if err != nil {
-                return "", err
-            }
-		}
-		file, err := os.Create(target)
+  		}
+  		file, err := os.Create(target)
         if err != nil {
             reader.Close()
             return "", err
         }
-    		
+
         _, copyErr := io.Copy(file, reader)
-    		
+
         readerErr := reader.Close()
         fileErr := file.Close()
-    		
+
         if copyErr != nil {
             return "", copyErr
         }
@@ -142,10 +132,17 @@ func extractQuestionIntoDir(dir string, attachment gapi.ProblemFile) (string, er
             return "", fileErr
         }
 	}
-    
+
     return sourceName, nil
 }
 
+func validSourceName(target, sourceName string) bool {
+    targetBase := filepath.Base(target)
+    sourceBase := filepath.Base(sourceName)
+    return targetBase == "main.h" && sourceBase != "student.h" ||
+            targetBase == "student.h" ||
+            sourceBase != "student.h"  && sourceBase != "main.h" && strings.Contains(targetBase, ".cpp")
+}
 const yoelSourceFile =
 `/*
 --- this file was automatically created by yoel ---
@@ -163,6 +160,6 @@ func makeEmptySourceFile(dir string) error {
     if err := os.WriteFile(sourceFile, []byte(yoelSourceFile), 0o755); err != nil {
         return err
     }
-    
+
     return nil
 }
