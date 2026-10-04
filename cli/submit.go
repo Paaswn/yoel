@@ -25,12 +25,10 @@ func newSubmitCommand() *cobra.Command {
 				fmt.Println(submission)
 				return nil
 			}
-			return newFunc(cmd, query, resultFunc)
+			return queryWithFunc(cmd, query, resultFunc)
 		},
 	}
 	command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
     command.Flags().IntVarP(&maxRow, "max-row", "m", 10, "maximum number of rows to display")
 	return command
 }
-
-type resultFunc func(context.Context, core.SavedSession, core.ProblemLite, *core.Registry) error

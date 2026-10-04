@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"strconv"
 
@@ -16,7 +17,7 @@ func newNewCommand() *cobra.Command {
         Short: "Create a new question",
         Args:  cobra.ExactArgs(1),
         RunE: func(cmd *cobra.Command, args []string) error {
-            return newFunc(cmd, args[0], core.CreateQuestion)
+            return queryWithFunc(cmd, args[0], core.CreateQuestion)
         },
     }
     command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
@@ -24,7 +25,8 @@ func newNewCommand() *cobra.Command {
     return command
 }
 
-func newFunc(cmd *cobra.Command, query string, resFunc resultFunc) error {
+type resultFunc func(context.Context, core.SavedSession, core.ProblemLite, *core.Registry) error
+func queryWithFunc(cmd *cobra.Command, query string, resFunc resultFunc) error {
     id, parseError := strconv.Atoi(query)
     if parseError != nil && !errors.Is(parseError, strconv.ErrSyntax) {
         return parseError
@@ -34,7 +36,9 @@ func newFunc(cmd *cobra.Command, query string, resFunc resultFunc) error {
         if !yesNoPrompt(cmd, "Session expired. Login again ?") {
             return nil
         }
-        return runLoginForm(cmd)
+        if err := runLoginForm(cmd); err != nil {
+            return err
+        }
     }
     if sessionError != nil {
         return sessionError
