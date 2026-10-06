@@ -44,7 +44,7 @@ func newSubmitCommand() *cobra.Command {
 				_, err := lg.Fprintln(cmd.OutOrStdout(), formatSubmission(&submission))
 				return err
 			}
-			return queryWithFunc(cmd, query, resultFunc)
+			return queryWithResFunc(cmd, query, resultFunc)
 		},
 	}
 	command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")

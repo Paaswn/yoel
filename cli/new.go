@@ -17,7 +17,7 @@ func newNewCommand() *cobra.Command {
         Short: "Create a new question",
         Args:  cobra.ExactArgs(1),
         RunE: func(cmd *cobra.Command, args []string) error {
-            return queryWithFunc(cmd, args[0], core.CreateQuestion)
+            return queryWithResFunc(cmd, args[0], core.CreateQuestion)
         },
     }
     command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
@@ -26,7 +26,7 @@ func newNewCommand() *cobra.Command {
 }
 
 type resultFunc func(context.Context, core.SavedSession, core.ProblemLite, *core.Registry) error
-func queryWithFunc(cmd *cobra.Command, query string, resFunc resultFunc) error {
+func queryWithResFunc(cmd *cobra.Command, query string, resFunc resultFunc) error {
     id, parseError := strconv.Atoi(query)
     if parseError != nil && !errors.Is(parseError, strconv.ErrSyntax) {
         return parseError
@@ -40,7 +40,7 @@ func queryWithFunc(cmd *cobra.Command, query string, resFunc resultFunc) error {
             return err
         }
     }
-    if sessionError != nil {
+    if sessionError != nil && errors.Is(sessionError, core.SessionExpiredError) {
         return sessionError
     }
     reg, regError := core.NewRegistry()
