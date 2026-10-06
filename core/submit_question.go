@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -17,10 +18,21 @@ func SubmitQuestion(ctx context.Context, session SavedSession, problem ProblemLi
     return submitQuestion(ctx, client.WithToken(session.Token), problem)
 }
 
+func readSourceContentToString(path string) ( string, error  ){
+    bytes, err :=  os.ReadFile(path)
+    if err != nil {
+        return "", err
+    }
+    return string(bytes), nil
+}
 func submitQuestion(ctx context.Context, client *gapi.Client, problem ProblemLite) ( SubmissionResult, error ) {
     name := filepath.Base(problem.SourcePath)
+    content, err := readSourceContentToString(problem.SourcePath)
+    if err != nil {
+        return SubmissionResult{}, err
+    }
     submission, err := client.Submit(ctx, problem.ID, gapi.SubmissionRequest{
-        Source: problem.SourcePath,
+        Source: content,
         Filename: name,
     })
     if err != nil {
@@ -34,8 +46,12 @@ func submitQuestion(ctx context.Context, client *gapi.Client, problem ProblemLit
             return SubmissionResult{}, err
         }
         switch sub.Status {
-            case "done", "compilation_error", "grader_error":
-                return toSubmissionResult(&sub), nil
+            case "done":
+                return toSubmissionResult(&sub, Done), nil
+            case "compilation_error":
+                return toSubmissionResult(&sub, CompilationError), nil
+            case"grader_error":
+                return toSubmissionResult(&sub, GraderError), nil
             default:
         }
         select {
@@ -46,6 +62,12 @@ func submitQuestion(ctx context.Context, client *gapi.Client, problem ProblemLit
     }
 }
 
+type Status int
+const (
+    Done Status = iota
+    CompilationError
+    GraderError
+ )
 type SubmissionResult struct {
 	ID              int
 	ProblemID       int
@@ -53,7 +75,7 @@ type SubmissionResult struct {
 	Language        string
 	SubmittedAt     time.Time
 	Points          *float64
-	Status          string
+	Status          Status
 	GraderComment   *string
 	CompilerMessage *string
 	MaxRuntime      *float64
@@ -62,7 +84,7 @@ type SubmissionResult struct {
 	Evaluations     []gapi.Evaluation
 }
 
-func toSubmissionResult(sub *gapi.Submission) SubmissionResult {
+func toSubmissionResult(sub *gapi.Submission, status Status) SubmissionResult {
     return SubmissionResult{
         ID:              sub.ID,
         ProblemID:       sub.ProblemID,
@@ -70,7 +92,7 @@ func toSubmissionResult(sub *gapi.Submission) SubmissionResult {
         Language:        sub.Language,
         SubmittedAt:     sub.SubmittedAt,
         Points:          sub.Points,
-        Status:          sub.Status,
+        Status:          status,
         GraderComment:   sub.GraderComment,
         CompilerMessage: sub.CompilerMessage,
         MaxRuntime:      sub.MaxRuntime,
@@ -78,8 +100,4 @@ func toSubmissionResult(sub *gapi.Submission) SubmissionResult {
         Number:          sub.Number,
         Evaluations:     sub.Evaluations,
     }
-}
-
-func (s *SubmissionResult) Format() string {
-    return ""
 }
