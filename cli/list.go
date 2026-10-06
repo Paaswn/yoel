@@ -20,7 +20,7 @@ func newListCommand() *cobra.Command {
         Use:   "list",
         Short: "show list of questions from grader",
         RunE: func(cmd *cobra.Command, args []string) error {
-            return renderQuestionLists(cmd, args)
+            return renderQuestionLists(cmd)
         },
     }
     command.Flags().StringVarP(&filter, "filter", "f", "", "filter question name, great for scripting")
@@ -29,7 +29,7 @@ func newListCommand() *cobra.Command {
     return command
 }
 
-func renderQuestionLists(cmd *cobra.Command, args []string) error {
+func renderQuestionLists(cmd *cobra.Command) error {
     session, err := core.LoadSession()
     switch err {
         case nil:
