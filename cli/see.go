@@ -16,7 +16,7 @@ func newSeeCommand() *cobra.Command {
     var maxRow int
     cmd := &cobra.Command{
         Use:   "see",
-        Short: "display problem informations",
+        Short: "Display problem informations",
         Args: cobra.ExactArgs(1),
         RunE: func(cmd *cobra.Command, args []string) error {
             query := args[0]

@@ -18,7 +18,7 @@ func newSubmitCommand() *cobra.Command {
     var maxRow int
 	command := &cobra.Command{
 		Use:   "submit",
-		Short: "submit source file to grader",
+		Short: "Submit source file to grader",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 		    query := args[0]

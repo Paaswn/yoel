@@ -22,8 +22,7 @@ func newLoginCommand() *cobra.Command {
     var graderURL string
     command :=  &cobra.Command{
             Use: "login",
-            Short: "login to your account",
-            Long:  "login to your account, session is saved inside your os keyring",
+            Short: "Login to your account",
             RunE: func(command *cobra.Command, _ []string) error {
                 return runLoginForm(command)
 		},

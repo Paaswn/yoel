@@ -18,7 +18,7 @@ func newListCommand() *cobra.Command {
     var filter string
     command := &cobra.Command{
         Use:   "list",
-        Short: "show list of questions from grader",
+        Short: "Show list of questions from grader",
         RunE: func(cmd *cobra.Command, args []string) error {
             return renderQuestionLists(cmd)
         },
