@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -40,7 +42,8 @@ func createQuestion(ctx context.Context, cwd string, problem ProblemLite, client
     if err != nil {
         return err
     }
-    pdfPath := filepath.Join(temp, strconv.Itoa(id)+".pdf")
+    pdfName := strconv.Itoa(id)+".pdf"
+    pdfPath := filepath.Join(temp, pdfName)
     if err = os.WriteFile(pdfPath, rawPDF.Data, 0o444); err != nil {
         return err
     }
@@ -74,7 +77,7 @@ func createQuestion(ctx context.Context, cwd string, problem ProblemLite, client
     if err := reg.SetProblemPath(problem.ID, sourcePath, dirPath); err != nil {
         return err
     }
-    return nil
+    return openWithDefaultViewer(filepath.Join(dirPath, pdfName))
 }
 
 func extractQuestionIntoDir(dir string, attachment gapi.ProblemFile) (string, error ) {
@@ -162,4 +165,20 @@ func makeEmptySourceFile(dir string) error {
     }
 
     return nil
+}
+
+func openWithDefaultViewer(path string) error {
+	var command *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		command = exec.Command("open", path)
+	case "windows":
+		command = exec.Command("rundll32", "url.dll,FileProtocolHandler", filepath.Clean(path))
+	default:
+		command = exec.Command("xdg-open", path)
+	}
+	if err := command.Start(); err != nil {
+		return fmt.Errorf("open PDF with default viewer: %w", err)
+	}
+	return nil
 }
