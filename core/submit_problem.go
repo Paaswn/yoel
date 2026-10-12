@@ -47,11 +47,16 @@ func submitProblem(ctx context.Context, client *gapi.Client, problem ProblemLite
         }
         switch sub.Status {
             case "done":
-                return toSubmissionResult(&sub, Done), nil
+                tList, err := client.ListTestcases(ctx, problem.ID)
+                if err != nil {
+                    return SubmissionResult{}, err
+                }
+                testcaseList := toTestCaseResult(sub.Evaluations, tList)
+                return toSubmissionResult(&sub, Done, testcaseList), nil
             case "compilation_error":
-                return toSubmissionResult(&sub, CompilationError), nil
+                return toSubmissionResult(&sub, CompilationError, []TestCaseResult{}), nil
             case"grader_error":
-                return toSubmissionResult(&sub, GraderError), nil
+                return toSubmissionResult(&sub, GraderError, []TestCaseResult{}), nil
             default:
         }
         select {
@@ -81,10 +86,10 @@ type SubmissionResult struct {
 	MaxRuntime      *float64
 	PeakMemory      *int
 	Number          int
-	Evaluations     []gapi.Evaluation
+	Evaluations     []TestCaseResult
 }
 
-func toSubmissionResult(sub *gapi.Submission, status Status) SubmissionResult {
+func toSubmissionResult(sub *gapi.Submission, status Status, testResults []TestCaseResult) SubmissionResult {
     return SubmissionResult{
         ID:              sub.ID,
         ProblemID:       sub.ProblemID,
@@ -98,6 +103,34 @@ func toSubmissionResult(sub *gapi.Submission, status Status) SubmissionResult {
         MaxRuntime:      sub.MaxRuntime,
         PeakMemory:      sub.PeakMemory,
         Number:          sub.Number,
-        Evaluations:     sub.Evaluations,
+        Evaluations:     testResults,
     }
+}
+
+type TestCaseResult struct {
+    Group int
+	TestcaseID int      
+	Result     string  
+}
+
+func toTestCaseResult(evals []gapi.Evaluation, testCases []gapi.Testcase) []TestCaseResult {
+    cases := make(map[int]int, len(testCases))
+    for _, t := range testCases {
+        if t.Group == nil {
+            cases[t.ID] = 0
+        } else {
+            cases[t.ID] = *t.Group
+        }
+    }
+    results := make([]TestCaseResult, len(evals))
+    for i, e := range evals {
+        if e.Result == nil {
+            results[i].Result = ""
+        } else {
+            results[i].Result = *e.Result
+        }
+        results[i].TestcaseID = e.TestcaseID
+        results[i].Group = cases[e.TestcaseID]
+    }
+    return results
 }
