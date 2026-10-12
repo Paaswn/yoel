@@ -2,12 +2,41 @@ package graderapi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 )
 
 const maxTestcaseFileSize int64 = 4 << 20
+
+// Testcase contains the metadata returned for a problem's testcase.
+// ID identifies the testcase globally; Num is its display number in the problem.
+type Testcase struct {
+	ID        int     `json:"id"`
+	Num       int     `json:"num"`
+	Group     *int    `json:"group"`
+	GroupName *string `json:"group_name"`
+	Weight    *int    `json:"weight"`
+}
+
+// ListTestcases returns testcase metadata in the order provided by the grader.
+func (c *Client) ListTestcases(ctx context.Context, problemID int) ([]Testcase, error) {
+	const operation = "list testcases"
+	if problemID <= 0 {
+		return nil, fmt.Errorf("%s: %w: problem ID must be positive", operation, ErrInvalidInput)
+	}
+	apiPath := "/api/v1/problems/" + strconv.Itoa(problemID) + "/testcases"
+	body, err := c.do(ctx, operation, http.MethodGet, apiPath, nil, true)
+	if err != nil {
+		return nil, err
+	}
+	var testcases []Testcase
+	if err := json.Unmarshal(body, &testcases); err != nil {
+		return nil, fmt.Errorf("%s: %w: malformed response", operation, ErrInvalidResponse)
+	}
+	return testcases, nil
+}
 
 // DownloadTestcaseInput returns the raw input exposed for a testcase.
 func (c *Client) DownloadTestcaseInput(ctx context.Context, testcaseID int) ([]byte, error) {
