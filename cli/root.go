@@ -70,6 +70,7 @@ func cliLoadSession(cmd *cobra.Command) (core.SavedSession, error) {
             if err := runLoginForm(cmd); err != nil {
                 return core.SavedSession{}, err
             }
+            return core.LoadSession()
         default:
             return core.SavedSession{}, err
     }
