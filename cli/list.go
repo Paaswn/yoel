@@ -18,12 +18,12 @@ func newListCommand() *cobra.Command {
     var filter string
     command := &cobra.Command{
         Use:   "list",
-        Short: "Show list of questions from grader",
+        Short: "Show list of problems from grader",
         RunE: func(cmd *cobra.Command, args []string) error {
             return renderQuestionLists(cmd)
         },
     }
-    command.Flags().StringVarP(&filter, "filter", "f", "", "filter question name, great for scripting")
+    command.Flags().StringVarP(&filter, "filter", "f", "", "filter problem name")
     command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
     command.Flags().IntVarP(&maxRow, "max-row", "m", 10, "maximum number of rows to display")
     return command
@@ -48,23 +48,23 @@ func renderQuestionLists(cmd *cobra.Command) error {
         return err
     }
     defer reg.Close()
-    var questions []core.ProblemLite
+    var problems []core.ProblemLite
     if cmd.Flags().Changed("filter") {
         filter, err := cmd.Flags().GetString("filter")
         if err != nil {
             return err
         }
-        questions, err = reg.QueryByName(filter)
+        problems, err = reg.QueryByName(filter)
         if err != nil {
             return err
         }
     } else {
-        questions, err = reg.GetAllQuestions()
+        problems, err = reg.GetAllQuestions()
         if err != nil {
             return err
         }
     }
-    
+
     if err != nil {
         return err
     }
@@ -73,20 +73,20 @@ func renderQuestionLists(cmd *cobra.Command) error {
         return err
     }
     if isTTY(cmd) && !disableInteractive {
-        problem, err := questionListInteractive(cmd, questions)
+        problem, err := problemListInteractive(cmd, problems)
         if err != nil {
             return err
         }
         return core.CreateQuestion(cmd.Context(), session, problem, reg)
     } else {
-        if err := questionListPrint(cmd.OutOrStderr(), questions); err != nil {
+        if err := problemListPrint(cmd.OutOrStderr(), problems); err != nil {
             return err
         }
     }
     return nil
 }
 
-func questionListInteractive(cmd *cobra.Command, questions []core.ProblemLite) ( core.ProblemLite, error ) {
+func problemListInteractive(cmd *cobra.Command, problems []core.ProblemLite) ( core.ProblemLite, error ) {
     var selected int
     maxRow, err := cmd.Flags().GetInt("max-row")
     if err != nil {
@@ -96,11 +96,11 @@ func questionListInteractive(cmd *cobra.Command, questions []core.ProblemLite) (
     keymap.Select.Down.SetKeys("j", "down", "ctrl+j")
     keymap.Select.Up.SetKeys("k", "up", "ctrl+k")
     keymap.Quit.SetKeys("q", "ctrl+c")
-    options := buildOptions(questions)
+    options := buildOptions(problems)
     form := huh.NewForm(
         huh.NewGroup(
             huh.NewSelect[int]().TitleFunc(func() string {
-                return questions[selected].PrettyName
+                return problems[selected].PrettyName
             }, &selected).Options(
                 options...
             ).Value(&selected).Height(maxRow),
@@ -112,12 +112,12 @@ func questionListInteractive(cmd *cobra.Command, questions []core.ProblemLite) (
         }
         return core.ProblemLite{ }, err
     }
-    return questions[selected], nil
+    return problems[selected], nil
 }
 
-func questionListPrint(w io.Writer, questions []core.ProblemLite) error {
+func problemListPrint(w io.Writer, problems []core.ProblemLite) error {
     writer := bufio.NewWriterSize(w, 4096)
-    for _, q := range questions {
+    for _, q := range problems {
         writer.WriteString(q.CodeName)
         fmt.Fprint(writer, " " , q.ID)
         writer.WriteRune('\n')
@@ -133,9 +133,9 @@ var (
    	ColorYellow = lipgloss.Color("#EAB308")
     ColorRed = lipgloss.Color("#EF4444")
 )
-func buildOptions(questions []core.ProblemLite) []huh.Option[int] {
-    options := make( []huh.Option[int], 0,  len(questions))
-    for i, q := range questions {
+func buildOptions(problems []core.ProblemLite) []huh.Option[int] {
+    options := make( []huh.Option[int], 0,  len(problems))
+    for i, q := range problems {
         prefixes := lipgloss.NewStyle()
         percentage := "-"
         if !q.IsOnLocal && q.BestScore == 0 {
@@ -157,5 +157,5 @@ func buildOptions(questions []core.ProblemLite) []huh.Option[int] {
         options = append(options, huh.NewOption(prettyName, i))
     }
     return options
-    
+
 }

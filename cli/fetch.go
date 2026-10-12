@@ -8,7 +8,7 @@ import (
 func newFetchCommand() *cobra.Command {
     return &cobra.Command{
         Use:   "fetch",
-        Short: "Fetch the latest questions from the server",
+        Short: "Fetch the latest problems from the server",
         RunE: func(cmd *cobra.Command, args []string) error {
             reg, err := core.NewRegistry()
             if err != nil {

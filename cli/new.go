@@ -14,7 +14,7 @@ func newNewCommand() *cobra.Command {
     var maxRow int
     command :=  &cobra.Command{
         Use:   "new <query>",
-        Short: "Create a new question",
+        Short: "Create a new problem",
         Args:  cobra.ExactArgs(1),
         RunE: func(cmd *cobra.Command, args []string) error {
             return queryWithResFunc(cmd, args[0], core.CreateQuestion)
@@ -67,13 +67,13 @@ func queryWithResFunc(cmd *cobra.Command, query string, resFunc resultFunc) erro
             return err
         }
         if isTTY(cmd) && !disableInteractive {
-            problem, err := questionListInteractive(cmd, problems)
+            problem, err := problemListInteractive(cmd, problems)
             if err != nil {
                 return err
             }
             return resFunc(cmd.Context(), session, problem, reg)
         } else {
-            if err := questionListPrint(cmd.OutOrStdout(), problems); err != nil {
+            if err := problemListPrint(cmd.OutOrStdout(), problems); err != nil {
                 return err
             }
         }

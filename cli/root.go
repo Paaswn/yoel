@@ -19,7 +19,7 @@ func NewRootCommandWithVersion(version string) *cobra.Command {
 		},
     }
     root.AddGroup(&cobra.Group{
-        ID: "question",
+        ID: "problem",
         Title: "Question related commands",
     })
     root.AddGroup(&cobra.Group{
@@ -34,11 +34,11 @@ func NewRootCommandWithVersion(version string) *cobra.Command {
     new := newNewCommand()
     submit := newSubmitCommand()
     see := newSeeCommand()
-    list.GroupID = "question"
-    fetch.GroupID = "question"
-    new.GroupID = "question"
-    submit.GroupID = "question"
-    see.GroupID = "question"
+    list.GroupID = "problem"
+    fetch.GroupID = "problem"
+    new.GroupID = "problem"
+    submit.GroupID = "problem"
+    see.GroupID = "problem"
     
     root.AddCommand(login, list, fetch, new, submit, see)
     return root
