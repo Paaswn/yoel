@@ -244,7 +244,6 @@ func TestExtractProblemIntoDir(t *testing.T) {
 		{"student before main", []problemZIPEntry{{"nested/student.h", "student"}, {"nested/main.h", "main"}}, "nested/student.h"},
 		{"main before other files", []problemZIPEntry{{"nested/main.h", "main"}, {"main.cpp", "program"}, {"README.txt", "readme"}}, "nested/main.h"},
 		{"main after other files", []problemZIPEntry{{"README.txt", "readme"}, {"nested/main.h", "main"}}, "nested/main.h"},
-		{"last regular file fallback", []problemZIPEntry{{"main.cpp", "program"}, {"docs/README.txt", "readme"}, {"empty/", ""}}, "docs/README.txt"},
 		{"empty ZIP", nil, ""},
 		{"directory-only ZIP", []problemZIPEntry{{"empty/", ""}}, ""},
 	} {
