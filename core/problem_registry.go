@@ -18,19 +18,19 @@ type Registry struct {
 var (
     ErrProblemNotFound = fmt.Errorf("Registry may be outdated. Try running 'yoel fetch' to update the registry: %w", sql.ErrNoRows)
 )
-const yoelCache = "yoel"
-const yoelDatabase = "yoel.db"
+const YoelCache = "yoel"
+const YoelDatabase = "yoel.db"
 func yoelNormalDBPath() ( string, error ) {
     configDir, err := os.UserConfigDir()
     if err != nil {
         return "", err
     }
-    dirPath := filepath.Join(configDir, yoelCache)
+    dirPath := filepath.Join(configDir, YoelCache)
 
     if err := os.MkdirAll(dirPath, 0700); err != nil {
         return "", err
     }
-    dbPath := filepath.Join(dirPath, yoelDatabase)
+    dbPath := filepath.Join(dirPath, YoelDatabase)
     return dbPath, nil
 }
 func NewRegistryWithPath(dbPath string) ( *Registry, error) {

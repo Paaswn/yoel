@@ -98,7 +98,7 @@ func TestRegistryNewRegistryPersistence(t *testing.T) {
 	p := ProblemLite{ID: 42, SortOrder: 7, BestScore: 75.5, CodeName: "arrays", PrettyName: "Array Problem",
 		SourcePath: "main.cpp", DirectoryPath: "arrays", IsOnLocal: true}
 	seedRegistryProblem(t, r, p)
-	if _, err := os.Stat(filepath.Join(configDir, yoelCache, yoelDatabase)); err != nil {
+	if _, err := os.Stat(filepath.Join(configDir, YoelCache, YoelDatabase)); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.Close(); err != nil {
@@ -118,7 +118,7 @@ func TestRegistryNewRegistryPersistence(t *testing.T) {
 
 func TestRegistryNewRegistryInvalidDirectory(t *testing.T) {
 	dir := registryConfigDirForTest(t)
-	if err := os.WriteFile(filepath.Join(dir, yoelCache), []byte("blocks directory creation"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, YoelCache), []byte("blocks directory creation"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	r, err := NewRegistry()
