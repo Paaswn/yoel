@@ -2,3 +2,6 @@ yoel
 !cmd/yoel/
 .yoel/
 .vhs
+tmp
+# Added by goreleaser init:
+dist/
