@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"os"
 
 	"github.com/Paaswn/yoel/core"
@@ -27,9 +28,11 @@ func NewRootCommandWithVersion(version string) *cobra.Command {
         ID: "user",
         Title: "User related commands",
     })
+    // user related command
     login := newLoginCommand()
     login.GroupID = "user"
 
+    // problem related command
     list := newListCommand()
     fetch := newFetchCommand()
     new := newNewCommand()
@@ -41,7 +44,8 @@ func NewRootCommandWithVersion(version string) *cobra.Command {
     submit.GroupID = "problem"
     see.GroupID = "problem"
     
-    root.AddCommand(login, list, fetch, new, submit, see)
+    update := newUpdateCommand(defaultUpdateDependencies(version))
+    root.AddCommand(login, list, fetch, new, submit, see, update)
     return root
 }
 
@@ -56,8 +60,12 @@ func cliLoadSession(cmd *cobra.Command) (core.SavedSession, error) {
     switch err {
         case nil:
         case core.SessionExpiredError:
-            if !yesNoPrompt(cmd, "Session expired. Login again ?") {
-                return core.SavedSession{}, nil
+            confirm, err := yesNoPrompt(cmd, "Session expired. Login again ?") 
+            if err != nil {
+                return core.SavedSession{}, err
+            }
+            if !confirm {
+                return core.SavedSession{}, errors.New("Login prompt was declined")
             }
             if err := runLoginForm(cmd); err != nil {
                 return core.SavedSession{}, err

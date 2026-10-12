@@ -8,14 +8,17 @@ import (
 	"github.com/Paaswn/yoel/core"
 	"github.com/spf13/cobra"
 )
-func yesNoPrompt(cmd *cobra.Command, title string) bool {
+func yesNoPrompt(cmd *cobra.Command, title string) ( bool, error ) {
     var confirm bool 
-    huh.NewForm(
+    err := huh.NewForm(
         huh.NewGroup(
             huh.NewConfirm().Title(title).Value(&confirm),
         ),
     ).WithInput(cmd.InOrStdin()).WithOutput(cmd.OutOrStdout()).RunWithContext(cmd.Context())
-    return confirm
+    if err != nil {
+        return false, err
+    }
+    return confirm, nil
 }
 
 func newLoginCommand() *cobra.Command {
