@@ -86,7 +86,6 @@ func problemListInteractive(cmd *cobra.Command, problems []core.ProblemLite) ( c
     keymap := huh.NewDefaultKeyMap()
     keymap.Select.Down.SetKeys("j", "down", "ctrl+j")
     keymap.Select.Up.SetKeys("k", "up", "ctrl+k")
-    keymap.Quit.SetKeys("q", "ctrl+c")
     options := buildOptions(problems)
     form := huh.NewForm(
         huh.NewGroup(
