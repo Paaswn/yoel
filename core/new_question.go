@@ -182,3 +182,10 @@ func openWithDefaultViewer(path string) error {
 	}
 	return nil
 }
+func getAttachment(ctx context.Context, client *gapi.Client, id int) (gapi.ProblemFile,  error ) {
+    attachment, err := client.DownloadProblemAttachment(ctx, id)
+    if err != nil {
+        return gapi.ProblemFile{}, err
+    }
+    return attachment, nil
+}
