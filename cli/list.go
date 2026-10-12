@@ -30,18 +30,9 @@ func newListCommand() *cobra.Command {
 }
 
 func renderQuestionLists(cmd *cobra.Command) error {
-    session, err := core.LoadSession()
-    switch err {
-        case nil:
-        case core.SessionExpiredError:
-            if !yesNoPrompt(cmd, "Session expired. Login again ?") {
-                return nil
-            }
-            if err := runLoginForm(cmd); err != nil {
-                return err
-            }
-        default:
-            return err
+    session, err := cliLoadSession(cmd)
+    if err != nil {
+        return err
     }
     reg, err := core.NewRegistry()
     if err != nil {

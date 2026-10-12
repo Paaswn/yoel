@@ -14,7 +14,7 @@ func newFetchCommand() *cobra.Command {
             if err != nil {
                 return err
             }
-            session, err := core.LoadSession()
+            session, err := cliLoadSession(cmd)
             if err != nil {
                 return err
             }

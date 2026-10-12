@@ -31,16 +31,8 @@ func queryWithResFunc(cmd *cobra.Command, query string, resFunc resultFunc) erro
     if parseError != nil && !errors.Is(parseError, strconv.ErrSyntax) {
         return parseError
     }
-    session, sessionError := core.LoadSession()
-    if errors.Is(sessionError, core.SessionExpiredError) {
-        if !yesNoPrompt(cmd, "Session expired. Login again ?") {
-            return nil
-        }
-        if err := runLoginForm(cmd); err != nil {
-            return err
-        }
-    }
-    if sessionError != nil && errors.Is(sessionError, core.SessionExpiredError) {
+    session, sessionError := cliLoadSession(cmd)
+    if sessionError != nil {
         return sessionError
     }
     reg, regError := core.NewRegistry()

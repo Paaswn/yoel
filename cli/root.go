@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 
+	"github.com/Paaswn/yoel/core"
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
@@ -48,4 +49,22 @@ func isTTY(cmd *cobra.Command) bool {
     f, ok := cmd.InOrStdin().(*os.File)
     fout, fok := cmd.OutOrStdout().(*os.File)
     return ok && term.IsTerminal(f.Fd()) && fok && term.IsTerminal(fout.Fd())
+}
+
+func cliLoadSession(cmd *cobra.Command) (core.SavedSession, error) {
+    session, err := core.LoadSession()
+    switch err {
+        case nil:
+        case core.SessionExpiredError:
+            if !yesNoPrompt(cmd, "Session expired. Login again ?") {
+                return core.SavedSession{}, nil
+            }
+            if err := runLoginForm(cmd); err != nil {
+                return core.SavedSession{}, err
+            }
+        default:
+            return core.SavedSession{}, err
+    }
+    return session, nil
+    
 }
