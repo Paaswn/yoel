@@ -62,16 +62,16 @@ func formatSubmission(s *core.SubmissionResult) string {
     return ""
 }
 
-const maxEvalWitdth = 32
+const maxEvalWidth = 32
 func formatDoneSubmission(s *core.SubmissionResult) string {
     header := lg.NewStyle().Bold(true)
     t := table.New().StyleFunc(func(row, col int) lg.Style {
         if col == 0 {
             return header
-        } 
+        }
         return lg.NewStyle()
     }).Border(lg.HiddenBorder()).Row("Problem:", s.ProblemName)
-    
+
     fmtPoints := lg.NewStyle()
     points := *s.Points
     if points >= 70.0 {
@@ -82,32 +82,45 @@ func formatDoneSubmission(s *core.SubmissionResult) string {
         fmtPoints.Foreground(ColorYellow)
     }
     t.Row("Points:", fmtPoints.Render( fmt.Sprintf("%.2f", points) ))
-    var evalResult strings.Builder
-    var eval strings.Builder
+    evals := make([]*strings.Builder, len(s.Evaluations))
+
     styleP := lg.NewStyle().Foreground(ColorGreen)
+    styleT := lg.NewStyle().Foreground(ColorYellow)
     styleFail := lg.NewStyle().Foreground(ColorRed)
-    rowWidth := 0
+
     for _, e := range s.Evaluations {
-        width := 2
-        eval.WriteByte('[')
-        for _, ch := range *e.Result {
-            if ch == 'P' {
-                eval.WriteString(styleP.Render("P"))
-            } else {
-                eval.WriteString(styleFail.Render("-"))
-            }
-            width++
+        group := e.Group - 1
+        if evals[group] == nil {
+            evals[group] = &strings.Builder{}
         }
-        eval.WriteByte(']')
-        if rowWidth+width > maxEvalWitdth {
-            evalResult.WriteByte('\n')
-            rowWidth = 0
+        switch (e.Result) {
+        case "waiting":
+            evals[group].WriteString(styleT.Render("W"))
+        case "correct":
+            evals[group].WriteString(styleP.Render("P"))
+        case "wrong":
+            evals[group].WriteString(styleFail.Render("-"))
+        case "time_limit":
+            evals[group].WriteString(styleT.Render("T"))
+        default:
+            evals[group].WriteString(styleFail.Render("X"))
         }
-        evalResult.WriteString(eval.String())
-        rowWidth += width
-        eval.Reset()
     }
-    t.Row("Evaluations:", evalResult.String())
+    var eval strings.Builder
+    accWidth := 0
+    for _, e := range evals {
+        width := lg.Width(e.String()) + 2
+        if accWidth + width > maxEvalWidth {
+            eval.WriteRune('\n')
+            accWidth = 0
+        }
+        accWidth += width
+        eval.WriteRune('[')
+        eval.WriteString(e.String())
+        eval.WriteRune(']')
+        
+    }
+    t.Row("Evaluations:", eval.String())
     return t.Render()
 }
 
