@@ -18,7 +18,7 @@ func newFetchCommand() *cobra.Command {
             if err != nil {
                 return err
             }
-            return reg.UpdateAllQuestions(cmd.Context(), session)
+            return reg.UpdateAllProblems(cmd.Context(), session)
         },
     }
 }

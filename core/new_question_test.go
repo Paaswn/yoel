@@ -18,60 +18,60 @@ import (
 	gapi "github.com/Paaswn/yoel/graderapi"
 )
 
-const questionTestPDF = "%PDF-1.7 test content"
-const questionTestToken = "fake-question-token"
+const problemTestPDF = "%PDF-1.7 test content"
+const problemTestToken = "fake-problem-token"
 
-func TestCreateQuestionNoAttachment(t *testing.T) {
+func TestCreateProblemNoAttachment(t *testing.T) {
 	cwd := t.TempDir()
 	problem := ProblemLite{ID: 42, CodeName: "sample", HasAttachment: false}
 	r := newRegistryForTest(t)
 	if err := r.Upsert(problem); err != nil {
 		t.Fatalf("Upsert() error = %v", err)
 	}
-	client := newQuestionFilesTestClient(t, problem.ID, map[string]questionFileResponse{
-		"pdf": {body: []byte(questionTestPDF)},
+	client := newProblemFilesTestClient(t, problem.ID, map[string]problemFileResponse{
+		"pdf": {body: []byte(problemTestPDF)},
 	}, "pdf")
 
-	if err := createQuestion(t.Context(), cwd, problem, client, r); err != nil {
-		t.Fatalf("createQuestion() error = %v", err)
+	if err := createProblem(t.Context(), cwd, problem, client, r); err != nil {
+		t.Fatalf("createProblem() error = %v", err)
 	}
 
-	questionDir := filepath.Join(cwd, problem.CodeName)
-	assertFileContents(t, filepath.Join(questionDir, "main.cpp"), []byte(yoelSourceFile), 0o755)
-	assertFileContents(t, filepath.Join(questionDir, "42.pdf"), []byte(questionTestPDF), 0o444)
-	assertQuestionDirectory(t, filepath.Join(questionDir, yoelHiddenDir))
-	assertQuestionRegistryPaths(t, r, problem.ID, filepath.Join(questionDir, "main.cpp"), questionDir)
-	assertQuestionDirectoryEntries(t, cwd, problem.CodeName)
+	problemDir := filepath.Join(cwd, problem.CodeName)
+	assertFileContents(t, filepath.Join(problemDir, "main.cpp"), []byte(yoelSourceFile), 0o755)
+	assertFileContents(t, filepath.Join(problemDir, "42.pdf"), []byte(problemTestPDF), 0o444)
+	assertProblemDirectory(t, filepath.Join(problemDir, yoelHiddenDir))
+	assertProblemRegistryPaths(t, r, problem.ID, filepath.Join(problemDir, "main.cpp"), problemDir)
+	assertProblemDirectoryEntries(t, cwd, problem.CodeName)
 }
 
-func TestCreateQuestionWithAttachment(t *testing.T) {
+func TestCreateProblemWithAttachment(t *testing.T) {
 	cwd := t.TempDir()
 	problem := ProblemLite{ID: 42, CodeName: "sample", HasAttachment: true}
 	r := newRegistryForTest(t)
 	if err := r.Upsert(problem); err != nil {
 		t.Fatal(err)
 	}
-	entries := []questionZIPEntry{
+	entries := []problemZIPEntry{
 		{name: "starter/"},
 		{name: "starter/main.h", body: "// attached main header\n"},
 		{name: "starter/student.h", body: "// attached student implementation\n"},
 		{name: "starter/main.cpp", body: "// attached program, not the generated template\n"},
 		{name: "README.txt", body: "attachment instructions\n"},
 	}
-	client := newQuestionFilesTestClient(t, problem.ID, map[string]questionFileResponse{
-		"pdf":        {body: []byte(questionTestPDF)},
-		"attachment": {body: makeQuestionTestZIP(t, entries)},
+	client := newProblemFilesTestClient(t, problem.ID, map[string]problemFileResponse{
+		"pdf":        {body: []byte(problemTestPDF)},
+		"attachment": {body: makeProblemTestZIP(t, entries)},
 	}, "pdf", "attachment")
 
-	if err := createQuestion(t.Context(), cwd, problem, client, r); err != nil {
-		t.Fatalf("createQuestion() error = %v", err)
+	if err := createProblem(t.Context(), cwd, problem, client, r); err != nil {
+		t.Fatalf("createProblem() error = %v", err)
 	}
-	questionDir := filepath.Join(cwd, problem.CodeName)
-	assertQuestionZIPContents(t, questionDir, entries)
-	assertFileContents(t, filepath.Join(questionDir, "42.pdf"), []byte(questionTestPDF), 0o444)
-	assertQuestionDirectory(t, filepath.Join(questionDir, yoelHiddenDir))
-	assertQuestionRegistryPaths(t, r, problem.ID, filepath.Join(questionDir, "starter", "student.h"), questionDir)
-	if _, err := os.Stat(filepath.Join(questionDir, "main.cpp")); !errors.Is(err, os.ErrNotExist) {
+	problemDir := filepath.Join(cwd, problem.CodeName)
+	assertProblemZIPContents(t, problemDir, entries)
+	assertFileContents(t, filepath.Join(problemDir, "42.pdf"), []byte(problemTestPDF), 0o444)
+	assertProblemDirectory(t, filepath.Join(problemDir, yoelHiddenDir))
+	assertProblemRegistryPaths(t, r, problem.ID, filepath.Join(problemDir, "starter", "student.h"), problemDir)
+	if _, err := os.Stat(filepath.Join(problemDir, "main.cpp")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("generated root main.cpp should be absent, stat error = %v", err)
 	}
 	got, err := r.QueryByID(problem.ID)
@@ -81,10 +81,10 @@ func TestCreateQuestionWithAttachment(t *testing.T) {
 	if !got.HasAttachment {
 		t.Error("creation lost the attachment flag")
 	}
-	assertQuestionDirectoryEntries(t, cwd, problem.CodeName)
+	assertProblemDirectoryEntries(t, cwd, problem.CodeName)
 }
 
-func TestCreateQuestionDoesNotReplaceExistingQuestion(t *testing.T) {
+func TestCreateProblemDoesNotReplaceExistingProblem(t *testing.T) {
 	cwd := t.TempDir()
 	problem := ProblemLite{ID: 7, CodeName: "existing"}
 	r := newRegistryForTest(t)
@@ -104,37 +104,37 @@ func TestCreateQuestionDoesNotReplaceExistingQuestion(t *testing.T) {
 	if err := os.WriteFile(marker, []byte("keep"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	client := newQuestionFilesTestClient(t, problem.ID, map[string]questionFileResponse{
-		"pdf": {body: []byte(questionTestPDF)},
+	client := newProblemFilesTestClient(t, problem.ID, map[string]problemFileResponse{
+		"pdf": {body: []byte(problemTestPDF)},
 	}, "pdf")
-	if err := createQuestion(t.Context(), cwd, problem, client, r); err == nil {
+	if err := createProblem(t.Context(), cwd, problem, client, r); err == nil {
 		t.Error("creation succeeded, want error when destination exists")
 	}
 	assertFileContents(t, marker, []byte("keep"), 0o644)
-	assertQuestionDirectoryEntries(t, destination, "keep.txt")
-	assertQuestionDirectoryEntries(t, cwd, problem.CodeName)
-	assertQuestionRegistryPaths(t, r, problem.ID, previousSource, previousDir)
+	assertProblemDirectoryEntries(t, destination, "keep.txt")
+	assertProblemDirectoryEntries(t, cwd, problem.CodeName)
+	assertProblemRegistryPaths(t, r, problem.ID, previousSource, previousDir)
 }
 
-func TestCreateQuestionDownloadFailures(t *testing.T) {
-	corruptZIP := corruptQuestionTestZIP(t)
+func TestCreateProblemDownloadFailures(t *testing.T) {
+	corruptZIP := corruptProblemTestZIP(t)
 	for _, tc := range []struct {
 		name       string
-		pdf        questionFileResponse
-		attachment questionFileResponse
+		pdf        problemFileResponse
+		attachment problemFileResponse
 		requests   []string
 		wantErr    error
 		wantStatus int
 	}{
-		{name: "PDF unauthorized", pdf: questionFileResponse{status: http.StatusUnauthorized}, requests: []string{"pdf"}, wantErr: gapi.ErrAuthentication, wantStatus: http.StatusUnauthorized},
-		{name: "PDF server failure", pdf: questionFileResponse{status: http.StatusInternalServerError}, requests: []string{"pdf"}, wantStatus: http.StatusInternalServerError},
-		{name: "invalid PDF", pdf: questionFileResponse{body: []byte("not a PDF")}, requests: []string{"pdf"}, wantErr: gapi.ErrInvalidResponse},
-		{name: "attachment forbidden", attachment: questionFileResponse{status: http.StatusForbidden}, requests: []string{"pdf", "attachment"}, wantErr: gapi.ErrAuthentication, wantStatus: http.StatusForbidden},
-		{name: "attachment server failure", attachment: questionFileResponse{status: http.StatusInternalServerError}, requests: []string{"pdf", "attachment"}, wantStatus: http.StatusInternalServerError},
+		{name: "PDF unauthorized", pdf: problemFileResponse{status: http.StatusUnauthorized}, requests: []string{"pdf"}, wantErr: gapi.ErrAuthentication, wantStatus: http.StatusUnauthorized},
+		{name: "PDF server failure", pdf: problemFileResponse{status: http.StatusInternalServerError}, requests: []string{"pdf"}, wantStatus: http.StatusInternalServerError},
+		{name: "invalid PDF", pdf: problemFileResponse{body: []byte("not a PDF")}, requests: []string{"pdf"}, wantErr: gapi.ErrInvalidResponse},
+		{name: "attachment forbidden", attachment: problemFileResponse{status: http.StatusForbidden}, requests: []string{"pdf", "attachment"}, wantErr: gapi.ErrAuthentication, wantStatus: http.StatusForbidden},
+		{name: "attachment server failure", attachment: problemFileResponse{status: http.StatusInternalServerError}, requests: []string{"pdf", "attachment"}, wantStatus: http.StatusInternalServerError},
 		{name: "empty attachment body", requests: []string{"pdf", "attachment"}, wantErr: gapi.ErrInvalidResponse},
-		{name: "invalid ZIP", attachment: questionFileResponse{body: []byte("not a ZIP")}, requests: []string{"pdf", "attachment"}, wantErr: zip.ErrFormat},
-		{name: "corrupted ZIP entry", attachment: questionFileResponse{body: corruptZIP}, requests: []string{"pdf", "attachment"}, wantErr: zip.ErrChecksum},
-		{name: "ZIP path traversal", attachment: questionFileResponse{body: makeQuestionTestZIP(t, []questionZIPEntry{{name: "../escape.cpp", body: "escape"}})}, requests: []string{"pdf", "attachment"}},
+		{name: "invalid ZIP", attachment: problemFileResponse{body: []byte("not a ZIP")}, requests: []string{"pdf", "attachment"}, wantErr: zip.ErrFormat},
+		{name: "corrupted ZIP entry", attachment: problemFileResponse{body: corruptZIP}, requests: []string{"pdf", "attachment"}, wantErr: zip.ErrChecksum},
+		{name: "ZIP path traversal", attachment: problemFileResponse{body: makeProblemTestZIP(t, []problemZIPEntry{{name: "../escape.cpp", body: "escape"}})}, requests: []string{"pdf", "attachment"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cwd := t.TempDir()
@@ -145,12 +145,12 @@ func TestCreateQuestionDownloadFailures(t *testing.T) {
 			}
 			pdf := tc.pdf
 			if len(tc.requests) == 2 {
-				pdf.body = []byte(questionTestPDF)
+				pdf.body = []byte(problemTestPDF)
 			}
-			client := newQuestionFilesTestClient(t, problem.ID, map[string]questionFileResponse{
+			client := newProblemFilesTestClient(t, problem.ID, map[string]problemFileResponse{
 				"pdf": pdf, "attachment": tc.attachment,
 			}, tc.requests...)
-			err := createQuestion(t.Context(), cwd, problem, client, r)
+			err := createProblem(t.Context(), cwd, problem, client, r)
 			if err == nil {
 				t.Error("creation succeeded, want download or extraction error")
 			} else {
@@ -163,34 +163,34 @@ func TestCreateQuestionDownloadFailures(t *testing.T) {
 						t.Errorf("error = %v, want HTTPError %d", err, tc.wantStatus)
 					}
 				}
-				if strings.Contains(err.Error(), questionTestToken) {
+				if strings.Contains(err.Error(), problemTestToken) {
 					t.Error("error exposed the fake bearer token")
 				}
 			}
-			assertQuestionDirectoryEntries(t, cwd)
-			assertQuestionRegistryPaths(t, r, problem.ID, "", "")
+			assertProblemDirectoryEntries(t, cwd)
+			assertProblemRegistryPaths(t, r, problem.ID, "", "")
 		})
 	}
 }
 
-func TestCreateQuestionCanceledContext(t *testing.T) {
+func TestCreateProblemCanceledContext(t *testing.T) {
 	cwd := t.TempDir()
 	problem := ProblemLite{ID: 42, CodeName: "sample", HasAttachment: true}
 	r := newRegistryForTest(t)
 	if err := r.Upsert(problem); err != nil {
 		t.Fatal(err)
 	}
-	client := newQuestionFilesTestClient(t, problem.ID, nil)
+	client := newProblemFilesTestClient(t, problem.ID, nil)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if err := createQuestion(ctx, cwd, problem, client, r); !errors.Is(err, context.Canceled) {
+	if err := createProblem(ctx, cwd, problem, client, r); !errors.Is(err, context.Canceled) {
 		t.Errorf("error = %v, want context.Canceled", err)
 	}
-	assertQuestionDirectoryEntries(t, cwd)
-	assertQuestionRegistryPaths(t, r, problem.ID, "", "")
+	assertProblemDirectoryEntries(t, cwd)
+	assertProblemRegistryPaths(t, r, problem.ID, "", "")
 }
 
-func TestCreateQuestionMissingWorkingDirectory(t *testing.T) {
+func TestCreateProblemMissingWorkingDirectory(t *testing.T) {
 	root := t.TempDir()
 	cwd := filepath.Join(root, "missing")
 	problem := ProblemLite{ID: 42, CodeName: "sample"}
@@ -198,17 +198,17 @@ func TestCreateQuestionMissingWorkingDirectory(t *testing.T) {
 	if err := r.Upsert(problem); err != nil {
 		t.Fatal(err)
 	}
-	client := newQuestionFilesTestClient(t, problem.ID, map[string]questionFileResponse{
-		"pdf": {body: []byte(questionTestPDF)},
+	client := newProblemFilesTestClient(t, problem.ID, map[string]problemFileResponse{
+		"pdf": {body: []byte(problemTestPDF)},
 	}, "pdf")
-	if err := createQuestion(t.Context(), cwd, problem, client, r); !errors.Is(err, os.ErrNotExist) {
+	if err := createProblem(t.Context(), cwd, problem, client, r); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("error = %v, want missing-directory error", err)
 	}
-	assertQuestionDirectoryEntries(t, root)
-	assertQuestionRegistryPaths(t, r, problem.ID, "", "")
+	assertProblemDirectoryEntries(t, root)
+	assertProblemRegistryPaths(t, r, problem.ID, "", "")
 }
 
-func TestCreateQuestionRegistryUpdateFailure(t *testing.T) {
+func TestCreateProblemRegistryUpdateFailure(t *testing.T) {
 	cwd := t.TempDir()
 	problem := ProblemLite{ID: 42, CodeName: "sample"}
 	r := newRegistryForTest(t)
@@ -223,55 +223,55 @@ func TestCreateQuestionRegistryUpdateFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := newQuestionFilesTestClient(t, problem.ID, map[string]questionFileResponse{
-		"pdf": {body: []byte(questionTestPDF)},
+	client := newProblemFilesTestClient(t, problem.ID, map[string]problemFileResponse{
+		"pdf": {body: []byte(problemTestPDF)},
 	}, "pdf")
-	err = createQuestion(t.Context(), cwd, problem, client, r)
+	err = createProblem(t.Context(), cwd, problem, client, r)
 	if err == nil || !strings.Contains(err.Error(), "test rejected path update") {
 		t.Errorf("error = %v, want rejected registry update", err)
 	}
-	assertQuestionDirectoryEntries(t, cwd, "sample")
-	assertQuestionRegistryPaths(t, r, problem.ID, "", "")
+	assertProblemDirectoryEntries(t, cwd, "sample")
+	assertProblemRegistryPaths(t, r, problem.ID, "", "")
 }
 
-func TestExtractQuestionIntoDir(t *testing.T) {
+func TestExtractProblemIntoDir(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
-		entries []questionZIPEntry
+		entries []problemZIPEntry
 		source  string
 	}{
-		{"student after main", []questionZIPEntry{{"nested/main.h", "main"}, {"nested/student.h", "student"}, {"README.txt", "readme"}}, "nested/student.h"},
-		{"student before main", []questionZIPEntry{{"nested/student.h", "student"}, {"nested/main.h", "main"}}, "nested/student.h"},
-		{"main before other files", []questionZIPEntry{{"nested/main.h", "main"}, {"main.cpp", "program"}, {"README.txt", "readme"}}, "nested/main.h"},
-		{"main after other files", []questionZIPEntry{{"README.txt", "readme"}, {"nested/main.h", "main"}}, "nested/main.h"},
-		{"last regular file fallback", []questionZIPEntry{{"main.cpp", "program"}, {"docs/README.txt", "readme"}, {"empty/", ""}}, "docs/README.txt"},
+		{"student after main", []problemZIPEntry{{"nested/main.h", "main"}, {"nested/student.h", "student"}, {"README.txt", "readme"}}, "nested/student.h"},
+		{"student before main", []problemZIPEntry{{"nested/student.h", "student"}, {"nested/main.h", "main"}}, "nested/student.h"},
+		{"main before other files", []problemZIPEntry{{"nested/main.h", "main"}, {"main.cpp", "program"}, {"README.txt", "readme"}}, "nested/main.h"},
+		{"main after other files", []problemZIPEntry{{"README.txt", "readme"}, {"nested/main.h", "main"}}, "nested/main.h"},
+		{"last regular file fallback", []problemZIPEntry{{"main.cpp", "program"}, {"docs/README.txt", "readme"}, {"empty/", ""}}, "docs/README.txt"},
 		{"empty ZIP", nil, ""},
-		{"directory-only ZIP", []questionZIPEntry{{"empty/", ""}}, ""},
+		{"directory-only ZIP", []problemZIPEntry{{"empty/", ""}}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			source, err := extractQuestionIntoDir(dir, gapi.ProblemFile{Data: makeQuestionTestZIP(t, tc.entries)})
+			source, err := extractProblemIntoDir(dir, gapi.ProblemFile{Data: makeProblemTestZIP(t, tc.entries)})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if source != filepath.FromSlash(tc.source) {
 				t.Errorf("source = %q, want %q", source, filepath.FromSlash(tc.source))
 			}
-			assertQuestionZIPContents(t, dir, tc.entries)
+			assertProblemZIPContents(t, dir, tc.entries)
 		})
 	}
 }
 
-func TestExtractQuestionIntoDirFailures(t *testing.T) {
+func TestExtractProblemIntoDirFailures(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		data    []byte
 		wantErr error
 	}{
 		{"invalid ZIP", []byte("invalid"), zip.ErrFormat},
-		{"corrupt entry", corruptQuestionTestZIP(t), zip.ErrChecksum},
-		{"parent traversal", makeQuestionTestZIP(t, []questionZIPEntry{{"../escape.cpp", "escape"}}), nil},
-		{"nested traversal", makeQuestionTestZIP(t, []questionZIPEntry{{"nested/../../escape.cpp", "escape"}}), nil},
+		{"corrupt entry", corruptProblemTestZIP(t), zip.ErrChecksum},
+		{"parent traversal", makeProblemTestZIP(t, []problemZIPEntry{{"../escape.cpp", "escape"}}), nil},
+		{"nested traversal", makeProblemTestZIP(t, []problemZIPEntry{{"nested/../../escape.cpp", "escape"}}), nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -279,7 +279,7 @@ func TestExtractQuestionIntoDirFailures(t *testing.T) {
 			if err := os.Mkdir(dir, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			source, err := extractQuestionIntoDir(dir, gapi.ProblemFile{Data: tc.data})
+			source, err := extractProblemIntoDir(dir, gapi.ProblemFile{Data: tc.data})
 			if err == nil {
 				t.Error("extraction succeeded, want error")
 			} else if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
@@ -298,19 +298,19 @@ func TestExtractQuestionIntoDirFailures(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "nested"), []byte("keep"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		data := makeQuestionTestZIP(t, []questionZIPEntry{{"nested/student.h", "source"}})
-		if _, err := extractQuestionIntoDir(dir, gapi.ProblemFile{Data: data}); err == nil {
+		data := makeProblemTestZIP(t, []problemZIPEntry{{"nested/student.h", "source"}})
+		if _, err := extractProblemIntoDir(dir, gapi.ProblemFile{Data: data}); err == nil {
 			t.Error("extraction ignored a file blocking the parent directory")
 		}
 		assertFileContents(t, filepath.Join(dir, "nested"), []byte("keep"), 0o644)
 	})
 	t.Run("file collides with directory", func(t *testing.T) {
 		dir := t.TempDir()
-		data := makeQuestionTestZIP(t, []questionZIPEntry{{"blocked/", ""}, {"blocked", "source"}})
-		if _, err := extractQuestionIntoDir(dir, gapi.ProblemFile{Data: data}); err == nil {
+		data := makeProblemTestZIP(t, []problemZIPEntry{{"blocked/", ""}, {"blocked", "source"}})
+		if _, err := extractProblemIntoDir(dir, gapi.ProblemFile{Data: data}); err == nil {
 			t.Error("extraction ignored a directory blocking the output file")
 		}
-		assertQuestionDirectory(t, filepath.Join(dir, "blocked"))
+		assertProblemDirectory(t, filepath.Join(dir, "blocked"))
 	})
 }
 
@@ -334,12 +334,12 @@ func TestMakeEmptySourceFile(t *testing.T) {
 	})
 }
 
-type questionZIPEntry struct {
+type problemZIPEntry struct {
 	name string
 	body string
 }
 
-func makeQuestionTestZIP(t *testing.T, entries []questionZIPEntry) []byte {
+func makeProblemTestZIP(t *testing.T, entries []problemZIPEntry) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	writer := zip.NewWriter(&buf)
@@ -358,9 +358,9 @@ func makeQuestionTestZIP(t *testing.T, entries []questionZIPEntry) []byte {
 	return buf.Bytes()
 }
 
-func corruptQuestionTestZIP(t *testing.T) []byte {
+func corruptProblemTestZIP(t *testing.T) []byte {
 	t.Helper()
-	data := makeQuestionTestZIP(t, []questionZIPEntry{{"student.h", "source contents"}})
+	data := makeProblemTestZIP(t, []problemZIPEntry{{"student.h", "source contents"}})
 	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatal(err)
@@ -374,12 +374,12 @@ func corruptQuestionTestZIP(t *testing.T) []byte {
 	return data
 }
 
-type questionFileResponse struct {
+type problemFileResponse struct {
 	status int
 	body   []byte
 }
 
-func newQuestionFilesTestClient(t *testing.T, id int, responses map[string]questionFileResponse, wantRequests ...string) *gapi.Client {
+func newProblemFilesTestClient(t *testing.T, id int, responses map[string]problemFileResponse, wantRequests ...string) *gapi.Client {
 	t.Helper()
 	var mu sync.Mutex
 	var requests []string
@@ -411,7 +411,7 @@ func newQuestionFilesTestClient(t *testing.T, id int, responses map[string]quest
 		if r.Header.Get("Accept") != accept {
 			t.Errorf("%s Accept = %q, want %q", kind, r.Header.Get("Accept"), accept)
 		}
-		if r.Header.Get("Authorization") != "Bearer "+questionTestToken {
+		if r.Header.Get("Authorization") != "Bearer "+problemTestToken {
 			t.Error("request missing fake bearer authentication")
 		}
 		w.Header().Set("Content-Type", contentType)
@@ -434,10 +434,10 @@ func newQuestionFilesTestClient(t *testing.T, id int, responses map[string]quest
 	if err != nil {
 		t.Fatal(err)
 	}
-	return client.WithToken(questionTestToken)
+	return client.WithToken(problemTestToken)
 }
 
-func assertQuestionRegistryPaths(t *testing.T, r *Registry, id int, source, dir string) {
+func assertProblemRegistryPaths(t *testing.T, r *Registry, id int, source, dir string) {
 	t.Helper()
 	got, err := r.QueryByID(id)
 	if err != nil {
@@ -449,7 +449,7 @@ func assertQuestionRegistryPaths(t *testing.T, r *Registry, id int, source, dir 
 	}
 }
 
-func assertQuestionDirectoryEntries(t *testing.T, dir string, want ...string) {
+func assertProblemDirectoryEntries(t *testing.T, dir string, want ...string) {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -464,7 +464,7 @@ func assertQuestionDirectoryEntries(t *testing.T, dir string, want ...string) {
 	}
 }
 
-func assertQuestionDirectory(t *testing.T, path string) {
+func assertProblemDirectory(t *testing.T, path string) {
 	t.Helper()
 	info, err := os.Stat(path)
 	if err != nil {
@@ -475,12 +475,12 @@ func assertQuestionDirectory(t *testing.T, path string) {
 	}
 }
 
-func assertQuestionZIPContents(t *testing.T, dir string, entries []questionZIPEntry) {
+func assertProblemZIPContents(t *testing.T, dir string, entries []problemZIPEntry) {
 	t.Helper()
 	for _, entry := range entries {
 		path := filepath.Join(dir, filepath.FromSlash(entry.name))
 		if strings.HasSuffix(entry.name, "/") {
-			assertQuestionDirectory(t, path)
+			assertProblemDirectory(t, path)
 			continue
 		}
 		got, err := os.ReadFile(path)

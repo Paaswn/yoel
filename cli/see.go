@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	"charm.land/lipgloss/v2"
@@ -33,7 +34,7 @@ func newSeeCommand() *cobra.Command {
                     }
                     rows = append(rows, []string{})
                     rows[row] = append(rows[row], fType.Name)
-                    rows[row] = append(rows[row], lipgloss.Sprintf( "%v", fVal.Interface() ))
+                    rows[row] = append(rows[row], fmt.Sprintf( "%v", fVal.Interface() ))
                     row++
                 }
                 t := table.New().Rows(rows...).Border(lipgloss.HiddenBorder())

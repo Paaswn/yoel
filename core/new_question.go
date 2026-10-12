@@ -17,7 +17,7 @@ import (
 )
 
 const yoelHiddenDir string = ".yoel"
-func CreateQuestion(ctx context.Context, session SavedSession, problem ProblemLite, reg *Registry) error {
+func CreateProblem(ctx context.Context, session SavedSession, problem ProblemLite, reg *Registry) error {
     client, err := gapi.NewClient(DefaultGraderURL, nil)
     if err != nil {
         return err
@@ -26,10 +26,10 @@ func CreateQuestion(ctx context.Context, session SavedSession, problem ProblemLi
     if err != nil {
         return err
     }
-    return createQuestion(ctx, cwd, problem, client.WithToken(session.Token), reg)
+    return createProblem(ctx, cwd, problem, client.WithToken(session.Token), reg)
 }
 
-func createQuestion(ctx context.Context, cwd string, problem ProblemLite, client *gapi.Client, reg *Registry) error {
+func createProblem(ctx context.Context, cwd string, problem ProblemLite, client *gapi.Client, reg *Registry) error {
     c, cancel := context.WithTimeout(ctx, TimeOut)
     defer cancel()
     rawPDF, err := client.DownloadProblemPDF(c, problem.ID)
@@ -53,7 +53,7 @@ func createQuestion(ctx context.Context, cwd string, problem ProblemLite, client
         if err != nil {
             return err
         }
-        res_source, err := extractQuestionIntoDir(temp, attachment)
+        res_source, err := extractProblemIntoDir(temp, attachment)
         if err != nil {
             return err
         }
@@ -80,7 +80,7 @@ func createQuestion(ctx context.Context, cwd string, problem ProblemLite, client
     return openWithDefaultViewer(filepath.Join(dirPath, pdfName))
 }
 
-func extractQuestionIntoDir(dir string, attachment gapi.ProblemFile) (string, error ) {
+func extractProblemIntoDir(dir string, attachment gapi.ProblemFile) (string, error ) {
 	archive, err := zip.NewReader(bytes.NewReader(attachment.Data), int64(len(attachment.Data)))
 	if err != nil {
 		return "", err

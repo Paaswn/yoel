@@ -21,7 +21,7 @@ func NewRootCommandWithVersion(version string) *cobra.Command {
     }
     root.AddGroup(&cobra.Group{
         ID: "problem",
-        Title: "Question related commands",
+        Title: "Problem related commands",
     })
     root.AddGroup(&cobra.Group{
         ID: "user",

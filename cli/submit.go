@@ -27,7 +27,7 @@ func newSubmitCommand() *cobra.Command {
 			    if isTTY(cmd) {
 					lg.Fprintf(cmd.ErrOrStderr(), "Submitting %s with file %s...\n", problem.CodeName, filepath.Base( problem.SourcePath ))
 					s := spinner.New().Context(cmd.Context()).WithOutput(cmd.ErrOrStderr()).Title("Waiting for respone").ActionWithErr(func(c context.Context) error {
-        				sub, err := core.SubmitQuestion(c, session, problem, registry)
+        				sub, err := core.SubmitProblem(c, session, problem, registry)
                         submission = sub
                         return err
 					})
@@ -35,7 +35,7 @@ func newSubmitCommand() *cobra.Command {
     					return err
 					}
 				} else {
-    				sub, err := core.SubmitQuestion(cmd.Context(), session, problem, registry)
+    				sub, err := core.SubmitProblem(cmd.Context(), session, problem, registry)
                     submission = sub
                     if err != nil {
                         return err

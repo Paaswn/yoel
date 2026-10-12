@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -19,77 +19,20 @@ jobs:
       - run: go test ./...
       - run: sh scripts/test-install.sh
 
-  build:
+  release:
     needs: test
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - goos: darwin
-            goarch: amd64
-            archive: tar.gz
-          - goos: darwin
-            goarch: arm64
-            archive: tar.gz
-          - goos: linux
-            goarch: amd64
-            archive: tar.gz
-          - goos: linux
-            goarch: arm64
-            archive: tar.gz
-          - goos: windows
-            goarch: amd64
-            archive: zip
-          - goos: windows
-            goarch: arm64
-            archive: zip
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required by GoReleaser to read tags and git history
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Build and package
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          ARCHIVE: ${{ matrix.archive }}
-          VERSION: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "release tag must be vMAJOR.MINOR.PATCH" >&2; exit 1; }
-          mkdir -p dist/package
-          output="yoel"
-          if [ "$GOOS" = windows ]; then output="yoel.exe"; fi
-          CGO_ENABLED=0 go build -trimpath -ldflags "-X main.version=$VERSION" -o "dist/package/$output" ./cmd/yoel
-          asset="yoel_${VERSION}_${GOOS}_${GOARCH}"
-          if [ "$ARCHIVE" = tar.gz ]; then
-            tar -C dist/package -czf "dist/${asset}.tar.gz" "$output"
-          else
-            (cd dist/package && zip -q "../${asset}.zip" "$output")
-          fi
-      - uses: actions/upload-artifact@v4
+      - uses: goreleaser/goreleaser-action@v6
         with:
-          name: ${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/yoel_*
-          if-no-files-found: error
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-      - name: Generate checksums and publish
+          distribution: goreleaser
+          version: latest
+          args: release --clean
         env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          cd dist
-          sha256sum yoel_* > checksums.txt
-          gh release create "$VERSION" --repo "${GITHUB_REPOSITORY}" --generate-notes yoel_* checksums.txt
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

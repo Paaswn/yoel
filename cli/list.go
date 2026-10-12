@@ -20,7 +20,7 @@ func newListCommand() *cobra.Command {
         Use:   "list",
         Short: "Show list of problems from grader",
         RunE: func(cmd *cobra.Command, args []string) error {
-            return renderQuestionLists(cmd)
+            return renderProblemLists(cmd)
         },
     }
     command.Flags().StringVarP(&filter, "filter", "f", "", "filter problem name")
@@ -29,7 +29,7 @@ func newListCommand() *cobra.Command {
     return command
 }
 
-func renderQuestionLists(cmd *cobra.Command) error {
+func renderProblemLists(cmd *cobra.Command) error {
     session, err := cliLoadSession(cmd)
     if err != nil {
         return err
@@ -50,7 +50,7 @@ func renderQuestionLists(cmd *cobra.Command) error {
             return err
         }
     } else {
-        problems, err = reg.GetAllQuestions()
+        problems, err = reg.GetAllProblems()
         if err != nil {
             return err
         }
@@ -68,7 +68,7 @@ func renderQuestionLists(cmd *cobra.Command) error {
         if err != nil {
             return err
         }
-        return core.CreateQuestion(cmd.Context(), session, problem, reg)
+        return core.CreateProblem(cmd.Context(), session, problem, reg)
     } else {
         if err := problemListPrint(cmd.OutOrStderr(), problems); err != nil {
             return err

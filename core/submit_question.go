@@ -8,14 +8,14 @@ import (
 
 	gapi "github.com/Paaswn/yoel/graderapi"
 )
-func SubmitQuestion(ctx context.Context, session SavedSession, problem ProblemLite, reg *Registry) ( SubmissionResult, error  ){
+func SubmitProblem(ctx context.Context, session SavedSession, problem ProblemLite, reg *Registry) ( SubmissionResult, error  ){
     client, err := gapi.NewClient(DefaultGraderURL, nil)
     if err != nil {
         return SubmissionResult{}, err
     }
     ctx, cancel := context.WithTimeout(ctx, TimeOut)
     defer cancel()
-    return submitQuestion(ctx, client.WithToken(session.Token), problem)
+    return submitProblem(ctx, client.WithToken(session.Token), problem)
 }
 
 func readSourceContentToString(path string) ( string, error  ){
@@ -25,7 +25,7 @@ func readSourceContentToString(path string) ( string, error  ){
     }
     return string(bytes), nil
 }
-func submitQuestion(ctx context.Context, client *gapi.Client, problem ProblemLite) ( SubmissionResult, error ) {
+func submitProblem(ctx context.Context, client *gapi.Client, problem ProblemLite) ( SubmissionResult, error ) {
     name := filepath.Base(problem.SourcePath)
     content, err := readSourceContentToString(problem.SourcePath)
     if err != nil {

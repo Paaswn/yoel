@@ -17,7 +17,7 @@ func newNewCommand() *cobra.Command {
         Short: "Create a new problem",
         Args:  cobra.ExactArgs(1),
         RunE: func(cmd *cobra.Command, args []string) error {
-            return queryWithResFunc(cmd, args[0], core.CreateQuestion)
+            return queryWithResFunc(cmd, args[0], core.CreateProblem)
         },
     }
     command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")

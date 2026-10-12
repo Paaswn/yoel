@@ -7,15 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
-
 	gapi "github.com/Paaswn/yoel/graderapi"
 	_ "modernc.org/sqlite"
 )
 
-type RegistryMetadata struct {
-    LastUpdate time.Time `json:"last_update"`
-}
 type Registry struct {
     db *sql.DB
 }
@@ -233,12 +228,12 @@ func (r *Registry) QueryByName(name string) ([]ProblemLite, error) {
     return result, nil
 }
 
-func (r *Registry) updateAllQuestions(ctx context.Context, client *gapi.Client) error {
-    questions, err := client.ListProblems(ctx)
+func (r *Registry) updateAllProblems(ctx context.Context, client *gapi.Client) error {
+    problems, err := client.ListProblems(ctx)
     if err != nil {
         return err
     }
-    for i, q := range questions {
+    for i, q := range problems {
         var bestScore float64
         if q.BestScore == nil {
             bestScore = 0
@@ -260,17 +255,17 @@ func (r *Registry) updateAllQuestions(ctx context.Context, client *gapi.Client) 
     }
     return nil
 }
-func (r *Registry) UpdateAllQuestions(ctx context.Context, session SavedSession) error {
+func (r *Registry) UpdateAllProblems(ctx context.Context, session SavedSession) error {
     client, err := gapi.NewClient(DefaultGraderURL, nil )
     if err != nil {
         return err
     }
     ctx, cancel := context.WithTimeout(ctx, TimeOut)
     defer cancel()
-    return r.updateAllQuestions(ctx, client.WithToken(session.Token))
+    return r.updateAllProblems(ctx, client.WithToken(session.Token))
 }
 
-func (r *Registry) GetAllQuestions() ([]ProblemLite, error ) {
+func (r *Registry) GetAllProblems() ([]ProblemLite, error ) {
 
     rows, err := r.db.Query(`
             SELECT

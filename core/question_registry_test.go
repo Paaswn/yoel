@@ -90,7 +90,7 @@ func TestRegistryNewRegistryPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = r.Close() })
-	got, err := r.GetAllQuestions()
+	got, err := r.GetAllProblems()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestRegistryNewRegistryPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = reopened.Close() })
-	got, err = reopened.GetAllQuestions()
+	got, err = reopened.GetAllProblems()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestRegistryUpsert(t *testing.T) {
 		if err := r.Upsert(p); err != nil {
 			t.Fatal(err)
 		}
-		got, err := r.GetAllQuestions()
+		got, err := r.GetAllProblems()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -163,7 +163,7 @@ func TestRegistryUpsert(t *testing.T) {
 			t.Fatal(err)
 		}
 		updated.SourcePath, updated.DirectoryPath, updated.IsOnLocal = old.SourcePath, old.DirectoryPath, true
-		got, err := r.GetAllQuestions()
+		got, err := r.GetAllProblems()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -174,7 +174,7 @@ func TestRegistryUpsert(t *testing.T) {
 func TestRegistryQueries(t *testing.T) {
 	local := ProblemLite{ID: 42, SortOrder: 2, BestScore: 87.5, CodeName: "alpha-middle-code", PrettyName: "Middle Title",
 		SourcePath: "main.cpp", DirectoryPath: "local", IsOnLocal: true}
-	remote := ProblemLite{ID: 43, SortOrder: 0, CodeName: "remote", PrettyName: "A Middle Question"}
+	remote := ProblemLite{ID: 43, SortOrder: 0, CodeName: "remote", PrettyName: "A Middle Problem"}
 	unrelated := ProblemLite{ID: 44, SortOrder: 1, CodeName: "graphs", PrettyName: "Graph Problem"}
 	r := newRegistryForTest(t)
 	for _, p := range []ProblemLite{local, remote, unrelated} {
@@ -202,7 +202,7 @@ func TestRegistryQueries(t *testing.T) {
 		}{
 			{"middle", []ProblemLite{remote, local}},
 			{"middle-code", []ProblemLite{local}},
-			{"Middle Question", []ProblemLite{remote}},
+			{"Middle Problem", []ProblemLite{remote}},
 		} {
 			got, err := r.QueryByName(tc.name)
 			if err != nil {
@@ -218,7 +218,7 @@ func TestRegistryQueries(t *testing.T) {
 		}
 	})
 	t.Run("all records ordered by stored order", func(t *testing.T) {
-		got, err := r.GetAllQuestions()
+		got, err := r.GetAllProblems()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -238,7 +238,7 @@ func TestRegistryQueries(t *testing.T) {
 			t.Fatal(err)
 		}
 		assertRegistryProblems(t, matches, []ProblemLite{remote})
-		all, err := r.GetAllQuestions()
+		all, err := r.GetAllProblems()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -254,7 +254,7 @@ func TestRegistryMutations(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.SourcePath, p.DirectoryPath, p.IsOnLocal = "student.h", "arrays", true
-	got, err := r.GetAllQuestions()
+	got, err := r.GetAllProblems()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestRegistryMutations(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.BestScore = 100
-	got, err = r.GetAllQuestions()
+	got, err = r.GetAllProblems()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestRegistryMutations(t *testing.T) {
 	if err := r.UpdateProblemScore(999, 50); err != nil {
 		t.Fatal(err)
 	}
-	got, err = r.GetAllQuestions()
+	got, err = r.GetAllProblems()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +301,7 @@ func TestRegistryClosedDatabaseErrors(t *testing.T) {
 		"score":  func() error { return r.UpdateProblemScore(42, 100) },
 		"ID":     func() error { _, err := r.QueryByID(42); return err },
 		"name":   func() error { _, err := r.QueryByName("arrays"); return err },
-		"all":    func() error { _, err := r.GetAllQuestions(); return err },
+		"all":    func() error { _, err := r.GetAllProblems(); return err },
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := operation(); err == nil {
@@ -311,12 +311,12 @@ func TestRegistryClosedDatabaseErrors(t *testing.T) {
 	}
 }
 
-func TestRegistryUpdateAllQuestions(t *testing.T) {
+func TestRegistryUpdateAllProblems(t *testing.T) {
 	type refresher interface {
-		updateAllQuestions(context.Context, *gapi.Client) error
+		updateAllProblems(context.Context, *gapi.Client) error
 	}
 	if _, ok := any(&Registry{}).(refresher); !ok {
-		t.Fatal("HTTP tests require updateAllQuestions(ctx context.Context, session SavedSession, client *gapi.Client) error; no request was sent")
+		t.Fatal("HTTP tests require updateAllProblems(ctx context.Context, session SavedSession, client *gapi.Client) error; no request was sent")
 	}
 	const token = "fake-registry-token"
 	newClient := func(t *testing.T, handler http.HandlerFunc) *gapi.Client {
@@ -339,7 +339,7 @@ func TestRegistryUpdateAllQuestions(t *testing.T) {
 		return client
 	}
 	refresh := func(r *Registry, client *gapi.Client) error {
-		return any(r).(refresher).updateAllQuestions(t.Context(), client.WithToken(token))
+		return any(r).(refresher).updateAllProblems(t.Context(), client.WithToken(token))
 	}
 	t.Run("scores ordering repeated refresh and preserved paths", func(t *testing.T) {
 		r := newRegistryForTest(t)
@@ -353,7 +353,7 @@ func TestRegistryUpdateAllQuestions(t *testing.T) {
 		}
 		local.CodeName, local.PrettyName, local.BestScore = "arrays", "Array Problem", 87.5
 		remote := ProblemLite{ID: 43, CodeName: "graphs", PrettyName: "Graph Problem"}
-		got, err := r.GetAllQuestions()
+		got, err := r.GetAllProblems()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -366,7 +366,7 @@ func TestRegistryUpdateAllQuestions(t *testing.T) {
 			t.Fatal(err)
 		}
 		local.BestScore = 100
-		got, err = r.GetAllQuestions()
+		got, err = r.GetAllProblems()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -378,7 +378,7 @@ func TestRegistryUpdateAllQuestions(t *testing.T) {
 		if err := refresh(r, client); err != nil {
 			t.Fatal(err)
 		}
-		got, err := r.GetAllQuestions()
+		got, err := r.GetAllProblems()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -419,7 +419,7 @@ func TestRegistryUpdateAllQuestions(t *testing.T) {
 			if strings.Contains(err.Error(), token) || strings.Contains(err.Error(), "fake-private-body") {
 				t.Error("error exposed private request or response data")
 			}
-			got, err := r.GetAllQuestions()
+			got, err := r.GetAllProblems()
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -11,9 +11,9 @@ downloads, source submission and result polling, and the `user` command. Do
 not move those product decisions into `internal/graderapi`.
 
 `internal/registry` stores Yoel's generated question index separately at
-`<user-config-dir>/yoel/questions.json`. It is keyed by stable grader problem
-ID and preserves remote name metadata plus real local question/source paths.
-Question list refreshes remote records; successful question creation binds its
+`<user-config-dir>/yoel/Problems.json`. It is keyed by stable grader problem
+ID and preserves remote name metadata plus real local Problem/source paths.
+Problem list refreshes remote records; successful Problem creation binds its
 local paths. Submit resolves explicit files first, then exact registry keys
 (source filename, directory, ID, name, full name), and finally reports when it
 uses legacy recursive discovery. Do not move registry data into session storage,
