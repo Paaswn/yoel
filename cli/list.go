@@ -20,7 +20,7 @@ func newListCommand() *cobra.Command {
         Use:   "list",
         Short: "Show list of problems from grader",
         RunE: func(cmd *cobra.Command, args []string) error {
-            return renderProblemLists(cmd)
+            return queryWithResFunc(cmd, "", core.CreateProblem)
         },
     }
     command.Flags().StringVarP(&filter, "filter", "f", "", "filter problem name")
@@ -29,53 +29,53 @@ func newListCommand() *cobra.Command {
     return command
 }
 
-func renderProblemLists(cmd *cobra.Command) error {
-    session, err := cliLoadSession(cmd)
-    if err != nil {
-        return err
-    }
-    reg, err := core.NewRegistry()
-    if err != nil {
-        return err
-    }
-    defer reg.Close()
-    var problems []core.ProblemLite
-    if cmd.Flags().Changed("filter") {
-        filter, err := cmd.Flags().GetString("filter")
-        if err != nil {
-            return err
-        }
-        problems, err = reg.QueryByName(filter)
-        if err != nil {
-            return err
-        }
-    } else {
-        problems, err = reg.GetAllProblems()
-        if err != nil {
-            return err
-        }
-    }
-
-    if err != nil {
-        return err
-    }
-    disableInteractive, err := cmd.Flags().GetBool("disable-interactive")
-    if err != nil {
-        return err
-    }
-    if isTTY(cmd) && !disableInteractive {
-        problem, err := problemListInteractive(cmd, problems)
-        if err != nil {
-            return err
-        }
-        return core.CreateProblem(cmd.Context(), session, problem, reg)
-    } else {
-        if err := problemListPrint(cmd.OutOrStderr(), problems); err != nil {
-            return err
-        }
-    }
-    return nil
-}
+// func renderProblemLists(cmd *cobra.Command) error {
+//     session, err := cliLoadSession(cmd)
+//     if err != nil {
+//         return err
+//     }
+//     reg, err := core.NewRegistry()
+//     if err != nil {
+//         return err
+//     }
+//     defer reg.Close()
+//     var problems []core.ProblemLite
+//     if cmd.Flags().Changed("filter") {
+//         filter, err := cmd.Flags().GetString("filter")
+//         if err != nil {
+//             return err
+//         }
+//         problems, err = reg.QueryByName(filter)
+//         if err != nil {
+//             return err
+//         }
+//     } else {
+//         problems, err = reg.GetAllProblems()
+//         if err != nil {
+//             return err
+//         }
+//     }
+// 
+//     if err != nil {
+//         return err
+//     }
+//     disableInteractive, err := cmd.Flags().GetBool("disable-interactive")
+//     if err != nil {
+//         return err
+//     }
+//     if isTTY(cmd) && !disableInteractive {
+//         problem, err := problemListInteractive(cmd, problems)
+//         if err != nil {
+//             return err
+//         }
+//         return core.CreateProblem(cmd.Context(), session, problem, reg)
+//     } else {
+//         if err := problemListPrint(cmd.OutOrStderr(), problems); err != nil {
+//             return err
+//         }
+//     }
+//     return nil
+// }
 
 func problemListInteractive(cmd *cobra.Command, problems []core.ProblemLite) ( core.ProblemLite, error ) {
     var selected int
