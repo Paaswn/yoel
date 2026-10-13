@@ -113,7 +113,8 @@ func TestSubmitProblem(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := submitProblem(ctx, client.WithToken("fake-token"), ProblemLite{ID: 42, SourcePath: path})
+			r := newRegistryForTest(t)
+			got, err := submitProblem(ctx, client.WithToken("fake-token"), ProblemLite{ID: 42, SourcePath: path}, r)
 			if tc.wantErr != nil {
 				if !errors.Is(err, tc.wantErr) || got.ID != 0 {
 					t.Errorf("result ID = %d, error = %v; want no result and %v", got.ID, err, tc.wantErr)
@@ -124,7 +125,7 @@ func TestSubmitProblem(t *testing.T) {
 				if got.ID != 99 || got.ProblemID != 42 || got.ProblemName != "sample" || got.Status != tc.wantStatus {
 					t.Errorf("unexpected final submission: %#v", got)
 				}
-				if tc.wantStatus != Done && len(got.Evaluations) != 0 {
+				if tc.wantStatus != Done && len(got.TestCaseResults) != 0 {
 					t.Error("failed submission should have no testcase results")
 				}
 				switch tc.wantStatus {
@@ -136,8 +137,8 @@ func TestSubmitProblem(t *testing.T) {
 						{Group: 3, TestcaseID: 1, Result: evaluation},
 						{Group: 8, TestcaseID: 2, Result: ""},
 					}
-					if !reflect.DeepEqual(got.Evaluations, want) {
-						t.Errorf("evaluations = %#v, want %#v", got.Evaluations, want)
+					if !reflect.DeepEqual(got.TestCaseResults, want) {
+						t.Errorf("evaluations = %#v, want %#v", got.TestCaseResults, want)
 					}
 				case CompilationError:
 					if got.CompilerMessage == nil || *got.CompilerMessage != compiler {

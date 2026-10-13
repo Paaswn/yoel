@@ -15,7 +15,7 @@ func SubmitProblem(ctx context.Context, session SavedSession, problem ProblemLit
     }
     ctx, cancel := context.WithTimeout(ctx, TimeOut)
     defer cancel()
-    return submitProblem(ctx, client.WithToken(session.Token), problem)
+    return submitProblem(ctx, client.WithToken(session.Token), problem, reg)
 }
 
 func readSourceContentToString(path string) ( string, error  ){
@@ -25,7 +25,7 @@ func readSourceContentToString(path string) ( string, error  ){
     }
     return string(bytes), nil
 }
-func submitProblem(ctx context.Context, client *gapi.Client, problem ProblemLite) ( SubmissionResult, error ) {
+func submitProblem(ctx context.Context, client *gapi.Client, problem ProblemLite, reg *Registry) ( SubmissionResult, error ) {
     name := filepath.Base(problem.SourcePath)
     content, err := readSourceContentToString(problem.SourcePath)
     if err != nil {
@@ -48,15 +48,21 @@ func submitProblem(ctx context.Context, client *gapi.Client, problem ProblemLite
         switch sub.Status {
             case "done":
                 tList, err := client.ListTestcases(ctx, problem.ID)
+                // if any ListTestcases erorr occur just return submission result without testcaseList
                 if err != nil {
-                    return SubmissionResult{}, err
+                    testcaseList, groupAmount := toTestCaseResult(sub.Evaluations, []gapi.Testcase{})
+                    submissionResult := toSubmissionResult(&sub, Done, testcaseList, groupAmount)
+                    setBestScore(reg, &problem, &submissionResult)
+                    return submissionResult, nil
                 }
-                testcaseList := toTestCaseResult(sub.Evaluations, tList)
-                return toSubmissionResult(&sub, Done, testcaseList), nil
+                testcaseList, groupAmount := toTestCaseResult(sub.Evaluations, tList)
+                submissionResult := toSubmissionResult(&sub, Done, testcaseList, groupAmount)
+                setBestScore(reg, &problem, &submissionResult)
+                return submissionResult, nil
             case "compilation_error":
-                return toSubmissionResult(&sub, CompilationError, []TestCaseResult{}), nil
+                return toSubmissionResult(&sub, CompilationError, []TestCaseResult{}, 0), nil
             case"grader_error":
-                return toSubmissionResult(&sub, GraderError, []TestCaseResult{}), nil
+                return toSubmissionResult(&sub, GraderError, []TestCaseResult{}, 0), nil
             default:
         }
         select {
@@ -66,7 +72,11 @@ func submitProblem(ctx context.Context, client *gapi.Client, problem ProblemLite
         }
     }
 }
-
+func setBestScore(reg *Registry, problem *ProblemLite, submission *SubmissionResult) {
+    if *submission.Points > problem.BestScore {
+        reg.UpdateProblemScore(problem.ID, *submission.Points )
+    }
+}
 type Status int
 const (
     Done Status = iota
@@ -86,10 +96,11 @@ type SubmissionResult struct {
 	MaxRuntime      *float64
 	PeakMemory      *int
 	Number          int
-	Evaluations     []TestCaseResult
+	TestCaseResults     []TestCaseResult
+	TestGroupAmount int
 }
 
-func toSubmissionResult(sub *gapi.Submission, status Status, testResults []TestCaseResult) SubmissionResult {
+func toSubmissionResult(sub *gapi.Submission, status Status, testResults []TestCaseResult, groupAmount int) SubmissionResult {
     return SubmissionResult{
         ID:              sub.ID,
         ProblemID:       sub.ProblemID,
@@ -103,34 +114,41 @@ func toSubmissionResult(sub *gapi.Submission, status Status, testResults []TestC
         MaxRuntime:      sub.MaxRuntime,
         PeakMemory:      sub.PeakMemory,
         Number:          sub.Number,
-        Evaluations:     testResults,
+        TestCaseResults:     testResults,
+        TestGroupAmount: groupAmount,
     }
 }
 
 type TestCaseResult struct {
     Group int
-	TestcaseID int      
-	Result     string  
+	TestcaseID int
+	Result     string
 }
 
-func toTestCaseResult(evals []gapi.Evaluation, testCases []gapi.Testcase) []TestCaseResult {
+func toTestCaseResult(evals []gapi.Evaluation, testCases []gapi.Testcase) ( []TestCaseResult, int ) {
     cases := make(map[int]int, len(testCases))
     for _, t := range testCases {
         if t.Group == nil {
-            cases[t.ID] = 0
+            cases[t.ID] = 1;
         } else {
             cases[t.ID] = *t.Group
         }
     }
     results := make([]TestCaseResult, len(evals))
+    groupAmount := -1
     for i, e := range evals {
+        results[i].TestcaseID = e.TestcaseID
         if e.Result == nil {
             results[i].Result = ""
         } else {
             results[i].Result = *e.Result
         }
-        results[i].TestcaseID = e.TestcaseID
-        results[i].Group = cases[e.TestcaseID]
+        if len(testCases) == 0 {
+            results[i].Group = 1;
+        } else {
+            results[i].Group = cases[e.TestcaseID]
+        }
+        groupAmount = max(results[i].Group, groupAmount)
     }
-    return results
+    return results, groupAmount
 }

@@ -75,21 +75,21 @@ func formatDoneSubmission(s *core.SubmissionResult) string {
     fmtPoints := lg.NewStyle()
     points := *s.Points
     if points >= 70.0 {
-        fmtPoints.Foreground(ColorGreen)
+        fmtPoints = fmtPoints.Foreground(ColorGreen)
     } else if points <= 30.0 {
-        fmtPoints.Foreground(ColorRed)
+        fmtPoints = fmtPoints.Foreground(ColorRed)
     } else {
-        fmtPoints.Foreground(ColorYellow)
+        fmtPoints = fmtPoints.Foreground(ColorYellow)
     }
     t.Row("Points:", fmtPoints.Render( fmt.Sprintf("%.2f", points) ))
-    evals := make([]*strings.Builder, len(s.Evaluations))
+    evals := make([]*strings.Builder, s.TestGroupAmount)
 
     styleP := lg.NewStyle().Foreground(ColorGreen)
     styleT := lg.NewStyle().Foreground(ColorYellow)
     styleFail := lg.NewStyle().Foreground(ColorRed)
 
-    for _, e := range s.Evaluations {
-        group := e.Group - 1
+    for _, e := range s.TestCaseResults {
+        group := max(e.Group - 1, 0)
         if evals[group] == nil {
             evals[group] = &strings.Builder{}
         }
@@ -106,26 +106,26 @@ func formatDoneSubmission(s *core.SubmissionResult) string {
             evals[group].WriteString(styleFail.Render("X"))
         }
     }
-    var eval strings.Builder
+    var evaluations strings.Builder
     accWidth := 0
     for _, e := range evals {
         width := lg.Width(e.String()) + 2
         if accWidth + width > maxEvalWidth {
-            eval.WriteRune('\n')
+            evaluations.WriteRune('\n')
             accWidth = 0
         }
         accWidth += width
-        eval.WriteRune('[')
-        eval.WriteString(e.String())
-        eval.WriteRune(']')
-        
+        evaluations.WriteRune('[')
+        evaluations.WriteString(e.String())
+        evaluations.WriteRune(']')
+
     }
-    t.Row("Evaluations:", eval.String())
+    t.Row("Evaluations:", evaluations.String())
     return t.Render()
 }
 
 func formatFailedSubmission(s *core.SubmissionResult, t core.Status) string {
-    style := lg.NewStyle().MaxWidth(30).MaxHeight(50)
+    style := lg.NewStyle().MaxHeight(128)
     switch t {
         case core.CompilationError:
             return style.Render("Compiler message:\n", *s.CompilerMessage)
