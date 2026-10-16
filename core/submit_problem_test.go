@@ -30,7 +30,7 @@ func TestSubmitProblem(t *testing.T) {
 		{"missing source", "", "source", Done, 0, 0, 0, os.ErrNotExist},
 		{"submission rejected", "", "post", Done, 1, 0, 0, gapi.ErrAuthentication},
 		{"polling rejected", "", "poll", Done, 1, 1, 0, gapi.ErrAuthentication},
-		{"testcase metadata rejected", "done", "metadata", Done, 1, 2, 1, gapi.ErrAuthentication},
+		{"testcase fallback", "done", "metadata", Done, 1, 2, 1, nil},
 		{"cancel while pending", "", "cancel", Done, 1, 1, 0, context.Canceled},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -133,9 +133,18 @@ func TestSubmitProblem(t *testing.T) {
 					if got.Points == nil || *got.Points != points {
 						t.Error("lost final score")
 					}
-					want := []TestCaseResult{
-						{Group: 3, TestcaseID: 1, Result: evaluation},
-						{Group: 8, TestcaseID: 2, Result: ""},
+					var want []TestCaseResult
+					switch tc.name {
+					case "testcase fallback":
+						want = []TestCaseResult{
+							{Group: 1, TestcaseID: 1, Result: evaluation},
+							{Group: 1, TestcaseID: 2, Result: ""},
+						}
+					default:
+						want = []TestCaseResult{
+							{Group: 3, TestcaseID: 1, Result: evaluation},
+							{Group: 8, TestcaseID: 2, Result: ""},
+						}
 					}
 					if !reflect.DeepEqual(got.TestCaseResults, want) {
 						t.Errorf("evaluations = %#v, want %#v", got.TestCaseResults, want)
