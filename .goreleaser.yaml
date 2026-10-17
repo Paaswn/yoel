@@ -14,7 +14,7 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X main.version={{ .Version }}
+      - -X main.version=v{{ .Version }}
     goos:
       - darwin
       - linux

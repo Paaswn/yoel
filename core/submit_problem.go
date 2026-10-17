@@ -127,9 +127,9 @@ type TestCaseResult struct {
 
 func toTestCaseResult(evals []gapi.Evaluation, testCases []gapi.Testcase) ( []TestCaseResult, int ) {
     cases := make(map[int]int, len(testCases))
-    for _, t := range testCases {
+    for i, t := range testCases {
         if t.Group == nil {
-            cases[t.ID] = 1;
+            cases[t.ID] = i+1;
         } else {
             cases[t.ID] = *t.Group
         }
@@ -144,7 +144,7 @@ func toTestCaseResult(evals []gapi.Evaluation, testCases []gapi.Testcase) ( []Te
             results[i].Result = *e.Result
         }
         if len(testCases) == 0 {
-            results[i].Group = 1;
+            results[i].Group = i+1;
         } else {
             results[i].Group = cases[e.TestcaseID]
         }
