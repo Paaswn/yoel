@@ -109,6 +109,9 @@ func formatDoneSubmission(s *core.SubmissionResult) string {
     var evaluations strings.Builder
     accWidth := 0
     for _, e := range evals {
+        if e == nil {
+            continue
+        }
         width := lg.Width(e.String()) + 2
         if accWidth + width > maxEvalWidth {
             evaluations.WriteRune('\n')
