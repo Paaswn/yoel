@@ -3,6 +3,8 @@ project_name: "yoel"
 before:
   hooks:
     - go mod tidy
+    - go test ./... -count=1
+    - sh scripts/test-install.sh
 
 builds:
   - id: yoel
@@ -39,9 +41,6 @@ changelog:
   use: github
 
 release:
-  # github:
-  #   owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
-  #   name: "{{ .ProjectName }}"
   draft: false
   prerelease: auto
   mode: replace
