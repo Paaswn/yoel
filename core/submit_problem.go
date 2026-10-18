@@ -13,7 +13,7 @@ func SubmitProblem(ctx context.Context, session SavedSession, problem ProblemLit
     if err != nil {
         return SubmissionResult{}, err
     }
-    ctx, cancel := context.WithTimeout(ctx, TimeOut)
+    ctx, cancel := context.WithTimeout(ctx, time.Minute)
     defer cancel()
     return submitProblem(ctx, client.WithToken(session.Token), problem, reg)
 }
