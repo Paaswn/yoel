@@ -6,6 +6,7 @@ package core
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -19,6 +20,32 @@ import (
 	gapi "github.com/Paaswn/yoel/graderapi"
 )
 
+func TestProblemLiteToJSON(t *testing.T) {
+	p := ProblemLite{
+		ID:            42,
+		HasAttachment: true,
+		SortOrder:     3,
+		BestScore:     87.5,
+		CodeName:      "arrays",
+		PrettyName:    "Array Problem",
+		SourcePath:    "/tmp/arrays/main.cpp",
+		DirectoryPath: "/tmp/arrays",
+		IsOnLocal:     true,
+	}
+
+	got, err := p.ToJSON()
+	if err != nil {
+		t.Fatalf("toJSON() error = %v", err)
+	}
+	if !json.Valid(got) {
+		t.Fatalf("toJSON() returned invalid JSON: %q", got)
+	}
+	want := `{"id":42,"has_attachment":true,"sort_order":3,"best_score":87.5,"code_name":"arrays","pretty_name":"Array Problem","source_path":"/tmp/arrays/main.cpp","directory_path":"/tmp/arrays","is_on_local":true}`
+	if string(got) != want {
+		t.Errorf("toJSON() = %s, want %s", got, want)
+	}
+}
+
 func newRegistryForTest(t *testing.T) *Registry {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "registry.db")
@@ -27,9 +54,9 @@ func newRegistryForTest(t *testing.T) *Registry {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-    	if err := r.Close(); err != nil {
-            t.Errorf("closing registry: %v", err)
-        }
+		if err := r.Close(); err != nil {
+			t.Errorf("closing registry: %v", err)
+		}
 	})
 	return r
 }
