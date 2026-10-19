@@ -58,14 +58,18 @@ func queryWithResFunc(cmd *cobra.Command, query string, resFunc resultFunc) erro
         if err != nil {
             return err
         }
-        if isTTY(cmd) && !disableInteractive {
+        json, err := cmd.Flags().GetBool("json")
+        if err != nil {
+            return err
+        }
+        if !disableInteractive && !json && isTTY(cmd) {
             problem, err := problemListInteractive(cmd, problems)
             if err != nil {
                 return err
             }
             return resFunc(cmd.Context(), session, problem, reg)
         } else {
-            if err := problemListPrint(cmd.OutOrStdout(), problems); err != nil {
+            if err := problemListPrint(cmd, problems, json); err != nil {
                 return err
             }
         }

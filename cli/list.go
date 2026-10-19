@@ -2,9 +2,9 @@ package cli
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
@@ -16,6 +16,7 @@ func newListCommand() *cobra.Command {
     var disableInteractive bool
     var maxRow int
     var filter string
+    var json bool
     command := &cobra.Command{
         Use:   "list",
         Short: "Show list of problems from grader",
@@ -32,6 +33,7 @@ func newListCommand() *cobra.Command {
         },
     }
     command.Flags().StringVarP(&filter, "filter", "f", "", "filter problem name")
+    command.Flags().BoolVarP(&json, "json", "", false, "print output as json")
     command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
     command.Flags().IntVarP(&maxRow, "max-row", "m", 10, "maximum number of rows to display")
     return command
@@ -65,17 +67,18 @@ func problemListInteractive(cmd *cobra.Command, problems []core.ProblemLite) ( c
     return problems[selected], nil
 }
 
-func problemListPrint(w io.Writer, problems []core.ProblemLite) error {
-    writer := bufio.NewWriterSize(w, 4096)
-    for _, q := range problems {
-        writer.WriteString(q.CodeName)
-        fmt.Fprint(writer, " " , q.ID)
-        writer.WriteRune('\n')
-    }
-    if err := writer.Flush(); err != nil {
-        return err
-    }
-    return nil
+func problemListPrint(cmd *cobra.Command, problems []core.ProblemLite, jsonOutput bool) error {
+	if jsonOutput {
+		return json.NewEncoder(cmd.OutOrStdout()).Encode(problems)
+	}
+    
+	writer := bufio.NewWriterSize(cmd.OutOrStdout(), 4096)
+	for _, problem := range problems {
+		if _, err := fmt.Fprintf(writer, "%s %d\n", problem.CodeName, problem.ID); err != nil {
+			return err
+		}
+	}
+	return writer.Flush()
 }
 
 var (
