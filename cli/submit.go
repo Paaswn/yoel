@@ -38,7 +38,7 @@ func newSubmitCommand() *cobra.Command {
 					if err != nil {
 						return err
 					}
-					s := spinner.New().Context(cmd.Context()).WithOutput(cmd.ErrOrStderr()).Title("Waiting for respone").ActionWithErr(func(c context.Context) error {
+					s := spinner.New().Context(cmd.Context()).WithOutput(cmd.ErrOrStderr()).Title("Waiting for response").ActionWithErr(func(c context.Context) error {
 						sub, err := core.SubmitProblem(c, session, *problem, registry)
 						submission = sub
 						return err
