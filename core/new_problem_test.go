@@ -20,7 +20,6 @@ import (
 
 const problemTestPDF = "%PDF-1.7 test content"
 const problemTestToken = "fake-problem-token"
-
 func TestCreateProblemNoAttachment(t *testing.T) {
 	cwd := t.TempDir()
 	problem := ProblemLite{ID: 42, CodeName: "sample", HasAttachment: false}
@@ -45,6 +44,7 @@ func TestCreateProblemNoAttachment(t *testing.T) {
 }
 
 func TestCreateProblemWithAttachment(t *testing.T) {
+    yoelBanner = ""
 	cwd := t.TempDir()
 	problem := ProblemLite{ID: 42, CodeName: "sample", HasAttachment: true}
 	r := newRegistryForTest(t)

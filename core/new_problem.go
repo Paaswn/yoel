@@ -91,6 +91,12 @@ func setLocalProblemPath(problem *ProblemLite, sourcePath string, dirPath string
 	problem.DirectoryPath = dirPath
 	problem.SourcePath = sourcePath
 }
+
+var yoelBanner = `/*
+--- this file was prepared by yoel ---
+*/
+`
+
 func extractProblemIntoDir(dir string, attachment gapi.ProblemFile) (string, error) {
 	archive, err := zip.NewReader(bytes.NewReader(attachment.Data), int64(len(attachment.Data)))
 	if err != nil {
@@ -130,18 +136,22 @@ func extractProblemIntoDir(dir string, attachment gapi.ProblemFile) (string, err
 		if err != nil {
 			return "", err
 		}
-		if validSourceName(target, sourceName) {
-			sourceName, err = filepath.Rel(dir, target)
-			if err != nil {
-				return "", err
-			}
-		}
 		file, err := os.Create(target)
 		if err != nil {
 			reader.Close()
 			return "", err
 		}
-
+		if validSourceName(target, sourceName) {
+			sourceName, err = filepath.Rel(dir, target)
+			if err != nil {
+				return "", err
+			}
+			if _, err := io.WriteString(file, yoelBanner); err != nil {
+				reader.Close()
+				file.Close()
+				return "", err
+			}
+		}
 		_, copyErr := io.Copy(file, reader)
 
 		readerErr := reader.Close()
