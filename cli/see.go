@@ -65,7 +65,7 @@ func newSeeCommand() *cobra.Command {
 						return singleFunc(cmd.Context(), session, &problems[0], reg)
 					} else if jsonOutput {
 						return json.NewEncoder(cmd.OutOrStdout()).Encode(problems)
-					} else if disableInteractive {
+					} else if !isTTY(cmd) || disableInteractive {
 						for _, problem := range problems {
 							if err := singleFunc(cmd.Context(), session, &problem, reg); err != nil {
 								return err

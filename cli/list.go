@@ -34,7 +34,7 @@ func newListCommand() *cobra.Command {
 				}
 				if jsonOutput {
 					return json.NewEncoder(cmd.OutOrStdout()).Encode(problem)
-				} else if disableInteractive {
+				} else if !isTTY(cmd) || disableInteractive {
 					return problemPrint(cmd.OutOrStdout(), *problem)
 				} else {
 					err = core.CreateProblem(ctx, session, problem, reg)
@@ -58,7 +58,7 @@ func newListCommand() *cobra.Command {
 					}
 					if jsonOutput {
 						return json.NewEncoder(cmd.OutOrStdout()).Encode(problems)
-					} else if disableInteractive {
+					} else if !isTTY(cmd) || disableInteractive {
 						for _, problem := range problems {
 							if err := singleFunc(cmd.Context(), session, &problem, reg); err != nil {
 								return err
