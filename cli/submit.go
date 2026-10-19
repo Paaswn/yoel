@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -14,8 +15,8 @@ import (
 )
 
 func newSubmitCommand() *cobra.Command {
-    var disableInteractive bool
     var maxRow int
+    var jsonOutput bool
 	command := &cobra.Command{
 		Use:   "submit",
 		Short: "Submit source file to grader",
@@ -24,6 +25,10 @@ func newSubmitCommand() *cobra.Command {
 		    query := args[0]
 			single := func(ctx context.Context, session core.SavedSession, problem core.ProblemLite, registry *core.Registry) error {
 			    var submission core.SubmissionResult
+				jsonOutput, err := cmd.Flags().GetBool("json")
+                if err != nil {
+                    return err
+                }
 			    if isTTY(cmd) {
 					lg.Fprintf(cmd.ErrOrStderr(), "Submitting %s with file %s...\n", problem.CodeName, filepath.Base( problem.SourcePath ))
 					s := spinner.New().Context(cmd.Context()).WithOutput(cmd.ErrOrStderr()).Title("Waiting for respone").ActionWithErr(func(c context.Context) error {
@@ -41,18 +46,35 @@ func newSubmitCommand() *cobra.Command {
                         return err
                     }
 				}
-				_, err := lg.Fprintln(cmd.OutOrStdout(), formatSubmission(&submission))
-				return err
+				if jsonOutput {
+				    return json.NewEncoder(cmd.OutOrStdout()).Encode(submission)
+				} else {
+    				_, err := lg.Fprintln(cmd.OutOrStdout(), formatSubmission(&submission))
+                    return err
+				}
 			}
             resFunc := resultFunc{
                 single: single,
-                multiple: problemListWithResFunc,
+                multiple: func (cmd *cobra.Command, session core.SavedSession, problems []core.ProblemLite, reg *core.Registry, singleFunc handleSingleProblem) error {
+                    if len(problems) == 1 {
+                        return singleFunc(cmd.Context(), session, problems[0], reg)
+                    }
+                    if isTTY(cmd) {
+                        problem, err := problemListInteractive(cmd, problems)
+                        if err != nil {
+                            return err
+                        }
+                        return singleFunc(cmd.Context(), session, problem, reg)
+                    } else {
+                        return fmt.Errorf("query \"%s\" matched %v problems, but the output isn't interactive; submit using a problem ID or provide more specific problem's name.", query, len(problems))
+                    }
+                },
             }
 			return queryWithResFunc(cmd, query, resFunc)
 		},
 	}
-	command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
     command.Flags().IntVarP(&maxRow, "max-row", "m", 10, "maximum number of rows to display")
+    command.Flags().BoolVarP(&jsonOutput, "json", "j" ,false, "format output as json")
 	return command
 }
 

@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/Paaswn/yoel/core"
@@ -10,7 +11,6 @@ import (
 )
 
 func newNewCommand() *cobra.Command {
-    var disableInteractive bool
     var maxRow int
     var jsonOutput bool
     command :=  &cobra.Command{
@@ -18,14 +18,27 @@ func newNewCommand() *cobra.Command {
         Short: "Create a new problem",
         Args:  cobra.ExactArgs(1),
         RunE: func(cmd *cobra.Command, args []string) error {
+            query := args[0]
             resFunc := resultFunc{
                 single: core.CreateProblem,
-                multiple: problemListWithResFunc,
+                multiple: func (cmd *cobra.Command, session core.SavedSession, problems []core.ProblemLite, reg *core.Registry, singleFunc handleSingleProblem) error {
+                    if len(problems) == 1 {
+                        return singleFunc(cmd.Context(), session, problems[0], reg)
+                    }
+                    if isTTY(cmd) {
+                        problem, err := problemListInteractive(cmd, problems)
+                        if err != nil {
+                            return err
+                        }
+                        return singleFunc(cmd.Context(), session, problem, reg)
+                    } else {
+                        return fmt.Errorf("query \"%s\" matched %v problems, but the output isn't interactive; submit using a problem ID or provide more specific problem's name.", query, len(problems))
+                    }
+                },
             }
-            return queryWithResFunc(cmd, args[0], resFunc)
+            return queryWithResFunc(cmd, query, resFunc)
         },
     }
-    command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
     command.Flags().IntVarP(&maxRow, "max-row", "m", 10, "maximum number of rows to display")
     command.Flags().BoolVarP(&jsonOutput, "json", "j" ,false, "format output as json")
     return command
@@ -64,29 +77,4 @@ func queryWithResFunc(cmd *cobra.Command, query string, resFunc resultFunc) erro
         }
         return resFunc.multiple(cmd, session, problems, reg, resFunc.single)
     }
-}
-
-
-func problemListWithResFunc(cmd *cobra.Command, session core.SavedSession, problems []core.ProblemLite, reg *core.Registry, singleFunc handleSingleProblem) error {
-    if len(problems) == 1 {
-        return singleFunc(cmd.Context(), session, problems[0], reg)
-    }
-    disableInteractive, err := cmd.Flags().GetBool("disable-interactive")
-    if err != nil {
-        return err
-    }
-    jsonOutput, err := cmd.Flags().GetBool("json")
-    if err != nil {
-        return err
-    }
-    if !disableInteractive && !jsonOutput && isTTY(cmd) {
-        problem, err := problemListInteractive(cmd, problems)
-        if err != nil {
-            return err
-        }
-        return singleFunc(cmd.Context(), session, problem, reg)
-    } else if err := problemListPrint(cmd, problems, jsonOutput); err != nil {
-        return err
-    }
-    return nil
 }
