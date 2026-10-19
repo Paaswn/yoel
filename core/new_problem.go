@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -92,7 +93,18 @@ func setLocalProblemPath(problem *ProblemLite, sourcePath string, dirPath string
 func extractProblemIntoDir(dir string, attachment gapi.ProblemFile) (string, error ) {
 	archive, err := zip.NewReader(bytes.NewReader(attachment.Data), int64(len(attachment.Data)))
 	if err != nil {
-		return "", err
+	    if errors.Is(err, zip.ErrFormat) {
+			// extremely edge cases from the unpredictable cafe-grader rev 4.7.3cu's API
+			if filepath.Ext(attachment.Filename) != ".cpp" {
+			    return "", fmt.Errorf("file extension is neither zip nor cpp: %w", err)
+			}
+			attachmentPath := filepath.Join(dir, attachment.Filename)
+			if err = os.WriteFile(attachmentPath, attachment.Data, 0o755); err != nil {
+			    return "", err
+			}
+            return attachment.Filename, nil
+        }
+        return "", err
 	}
 	var sourceName string
 	for _, entry := range archive.File {
