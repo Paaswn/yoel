@@ -34,7 +34,7 @@ func newSubmitCommand() *cobra.Command {
 					if err != nil {
 					    return err
 					}
-					_, err = lg.Fprintf(cmd.ErrOrStderr(), "Submitting %s with file %s...\n", problem.CodeName, relative )
+					_, err = lg.Fprintf(cmd.ErrOrStderr(), lg.NewStyle().Faint( true ).Render( "Submitting %s with file %s...\n" ), problem.CodeName, relative )
 					if err != nil {
 					    return err
 					}
