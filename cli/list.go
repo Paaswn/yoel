@@ -2,9 +2,11 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
@@ -15,29 +17,40 @@ import (
 func newListCommand() *cobra.Command {
     var disableInteractive bool
     var maxRow int
-    var filter string
-    var json bool
+    var jsonOutput bool
     command := &cobra.Command{
         Use:   "list",
         Short: "Show list of problems from grader",
         RunE: func(cmd *cobra.Command, args []string) error {
-            query := ""
-            if cmd.Flags().Changed("filter") {
-                res, err := cmd.Flags().GetString("filter")
+            single := func(ctx context.Context, session core.SavedSession, problem core.ProblemLite, reg *core.Registry) error {
+                jsonOutput, err := cmd.Flags().GetBool("json")
                 if err != nil {
                     return err
                 }
-                query = res
+                disableInteractive, err := cmd.Flags().GetBool("disable-interactive")
+                if err != nil {
+                    return err
+                }
+                if jsonOutput {
+                    data, err := problem.ToJSON()
+                    if err != nil {
+                        return err
+                    }
+                    return json.NewEncoder(cmd.OutOrStdout()).Encode(data)
+                } else if disableInteractive  {
+                    return problemPrint(cmd.OutOrStdout(), problem)
+                } else {
+                    return core.CreateProblem(ctx, session, problem, reg)
+                }
             }
             resFunc := resultFunc{
-                single: core.CreateProblem,
+                single: single,
                 multiple: problemListWithResFunc,
             }
-            return queryWithResFunc(cmd, query, resFunc)
+            return queryWithResFunc(cmd, "", resFunc)
         },
     }
-    command.Flags().StringVarP(&filter, "filter", "f", "", "filter problem name")
-    command.Flags().BoolVarP(&json, "json", "", false, "print output as json")
+    command.Flags().BoolVarP(&jsonOutput, "json", "j", false,  "print output as json")
     command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
     command.Flags().IntVarP(&maxRow, "max-row", "m", 10, "maximum number of rows to display")
     return command
@@ -71,6 +84,11 @@ func problemListInteractive(cmd *cobra.Command, problems []core.ProblemLite) ( c
     return problems[selected], nil
 }
 
+func problemPrint(writer io.Writer, problem core.ProblemLite) error {
+     _, err := fmt.Fprintf(writer, "%s %d\n", problem.CodeName, problem.ID)
+	return err
+}
+
 func problemListPrint(cmd *cobra.Command, problems []core.ProblemLite, jsonOutput bool) error {
 	if jsonOutput {
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(problems)
@@ -78,7 +96,7 @@ func problemListPrint(cmd *cobra.Command, problems []core.ProblemLite, jsonOutpu
     
 	writer := bufio.NewWriterSize(cmd.OutOrStdout(), 4096)
 	for _, problem := range problems {
-		if _, err := fmt.Fprintf(writer, "%s %d\n", problem.CodeName, problem.ID); err != nil {
+		if err := problemPrint(writer, problem); err != nil {
 			return err
 		}
 	}
