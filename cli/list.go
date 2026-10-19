@@ -41,7 +41,32 @@ func newListCommand() *cobra.Command {
             }
             resFunc := resultFunc{
                 single: single,
-                multiple: problemListWithResFunc,
+                multiple: func (cmd *cobra.Command, session core.SavedSession, problems []core.ProblemLite, reg *core.Registry, singleFunc handleSingleProblem) error {
+                    jsonOutput, err := cmd.Flags().GetBool("json")
+                    if err != nil {
+                        return err
+                    }
+                    disableInteractive, err := cmd.Flags().GetBool("disable-interactive")
+                    if err != nil {
+                        return err
+                    }
+                    if jsonOutput {
+                        return json.NewEncoder(cmd.OutOrStdout()).Encode(problems)
+                    } else if disableInteractive {
+                        for _, problem := range problems {
+                            if err := singleFunc(cmd.Context(), session, problem, reg); err != nil {
+                                return err
+                            }
+                        }
+                    } else {
+                        problem, err := problemListInteractive(cmd, problems)
+                        if err != nil {
+                            return err
+                        }
+                        return singleFunc(cmd.Context(), session, problem, reg)
+                    }
+                    return nil
+                },
             }
             return queryWithResFunc(cmd, "", resFunc)
         },
@@ -89,7 +114,7 @@ func problemListPrint(cmd *cobra.Command, problems []core.ProblemLite, jsonOutpu
 	if jsonOutput {
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(problems)
 	}
-    
+
 	writer := bufio.NewWriterSize(cmd.OutOrStdout(), 4096)
 	for _, problem := range problems {
 		if err := problemPrint(writer, problem); err != nil {
