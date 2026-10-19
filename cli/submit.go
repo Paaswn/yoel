@@ -23,16 +23,23 @@ func newSubmitCommand() *cobra.Command {
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 		    query := args[0]
-			single := func(ctx context.Context, session core.SavedSession, problem core.ProblemLite, registry *core.Registry) error {
+			single := func(ctx context.Context, session core.SavedSession, problem *core.ProblemLite, registry *core.Registry) error {
 			    var submission core.SubmissionResult
 				jsonOutput, err := cmd.Flags().GetBool("json")
                 if err != nil {
                     return err
                 }
 			    if isTTY(cmd) {
-					lg.Fprintf(cmd.ErrOrStderr(), "Submitting %s with file %s...\n", problem.CodeName, filepath.Base( problem.SourcePath ))
+					relative, err := filepath.Rel( problem.DirectoryPath, problem.SourcePath )
+					if err != nil {
+					    return err
+					}
+					_, err = lg.Fprintf(cmd.ErrOrStderr(), "Submitting %s with file %s...\n", problem.CodeName, relative )
+					if err != nil {
+					    return err
+					}
 					s := spinner.New().Context(cmd.Context()).WithOutput(cmd.ErrOrStderr()).Title("Waiting for respone").ActionWithErr(func(c context.Context) error {
-        				sub, err := core.SubmitProblem(c, session, problem, registry)
+        				sub, err := core.SubmitProblem(c, session, *problem, registry)
                         submission = sub
                         return err
 					})
@@ -40,7 +47,7 @@ func newSubmitCommand() *cobra.Command {
     					return err
 					}
 				} else {
-    				sub, err := core.SubmitProblem(cmd.Context(), session, problem, registry)
+    				sub, err := core.SubmitProblem(cmd.Context(), session, *problem, registry)
                     submission = sub
                     if err != nil {
                         return err
@@ -49,7 +56,11 @@ func newSubmitCommand() *cobra.Command {
 				if jsonOutput {
 				    return json.NewEncoder(cmd.OutOrStdout()).Encode(submission)
 				} else {
-    				_, err := lg.Fprintln(cmd.OutOrStdout(), formatSubmission(&submission))
+				    fm, err := formatSubmission(&submission)
+					if err != nil {
+    					return err
+					}
+    				_, err = lg.Fprintln(cmd.OutOrStdout(), fm)
                     return err
 				}
 			}
@@ -57,14 +68,14 @@ func newSubmitCommand() *cobra.Command {
                 single: single,
                 multiple: func (cmd *cobra.Command, session core.SavedSession, problems []core.ProblemLite, reg *core.Registry, singleFunc handleSingleProblem) error {
                     if len(problems) == 1 {
-                        return singleFunc(cmd.Context(), session, problems[0], reg)
+                        return singleFunc(cmd.Context(), session, &problems[0], reg)
                     }
                     if isTTY(cmd) {
                         problem, err := problemListInteractive(cmd, problems)
                         if err != nil {
                             return err
                         }
-                        return singleFunc(cmd.Context(), session, problem, reg)
+                        return singleFunc(cmd.Context(), session, &problem, reg)
                     } else {
                         return fmt.Errorf("query \"%s\" matched %v problems, but the output isn't interactive; submit using a problem ID or provide more specific problem's name.", query, len(problems))
                     }
@@ -78,18 +89,18 @@ func newSubmitCommand() *cobra.Command {
 	return command
 }
 
-func formatSubmission(s *core.SubmissionResult) string {
+func formatSubmission(s *core.SubmissionResult) ( string, error ) {
     switch s.Status {
         case core.Done:
             return formatDoneSubmission(s)
         case core.CompilationError, core.GraderError:
-            return formatFailedSubmission(s, s.Status)
+            return formatFailedSubmission(s, s.Status), nil
     }
-    return ""
+    return "", nil
 }
 
 const maxEvalWidth = 32
-func formatDoneSubmission(s *core.SubmissionResult) string {
+func formatDoneSubmission(s *core.SubmissionResult) ( string, error ) {
     header := lg.NewStyle().Bold(true)
     t := table.New().StyleFunc(func(row, col int) lg.Style {
         if col == 0 {
@@ -108,49 +119,51 @@ func formatDoneSubmission(s *core.SubmissionResult) string {
         fmtPoints = fmtPoints.Foreground(ColorYellow)
     }
     t.Row("Points:", fmtPoints.Render( fmt.Sprintf("%.2f", points) ))
-    evals := make([]*strings.Builder, s.TestGroupAmount)
 
     styleP := lg.NewStyle().Foreground(ColorGreen)
     styleT := lg.NewStyle().Foreground(ColorYellow)
     styleFail := lg.NewStyle().Foreground(ColorRed)
-
-    for _, e := range s.TestCaseResults {
-        group := max(e.Group - 1, 0)
-        if evals[group] == nil {
-            evals[group] = &strings.Builder{}
-        }
-        switch (e.Result) {
-        case "waiting":
-            evals[group].WriteString(styleT.Render("W"))
-        case "correct":
-            evals[group].WriteString(styleP.Render("P"))
-        case "wrong":
-            evals[group].WriteString(styleFail.Render("-"))
-        case "time_limit":
-            evals[group].WriteString(styleT.Render("T"))
-        default:
-            evals[group].WriteString(styleFail.Render("X"))
-        }
-    }
-    var evaluations strings.Builder
-    accWidth := 0
-    for _, e := range evals {
-        if e == nil {
+    evals := &strings.Builder{}
+    comment := []rune(*s.GraderComment)
+    lineWidth := 0
+    for i, c := range comment {
+        if c == '\n' {
+            evals.WriteRune('\n')
+            lineWidth = 0
             continue
         }
-        width := lg.Width(e.String()) + 2
-        if accWidth + width > maxEvalWidth {
-            evaluations.WriteRune('\n')
-            accWidth = 0
+        if c == '[' {
+            for j := i + 1; j < len(comment) && comment[j] != '\n'; j++ {
+                if comment[j] == ']' {
+                    groupWidth := lg.Width(string(comment[i:j+1]))
+                    if groupWidth <= maxEvalWidth && lineWidth + groupWidth > maxEvalWidth {
+                        evals.WriteRune('\n')
+                        lineWidth = 0
+                    }
+                    break
+                }
+            }
         }
-        accWidth += width
-        evaluations.WriteRune('[')
-        evaluations.WriteString(e.String())
-        evaluations.WriteRune(']')
-
+        if lineWidth + 1 > maxEvalWidth {
+            evals.WriteRune('\n')
+            lineWidth = 0
+        }
+        lineWidth += 1 
+        switch (c) {
+        case '[', ']':
+            if _, err := evals.WriteRune(c); err != nil { return "" ,err  }
+        case 'P':
+            if _, err := evals.WriteString(styleP.Render("P")); err != nil { return "" ,err  }
+        case '-':
+            if _, err := evals.WriteString(styleFail.Render("-")); err != nil { return "" ,err  }
+        case 'T':
+            if _, err :=  evals.WriteString(styleT.Render("T")); err != nil { return "" ,err  }
+        default:
+            if _, err :=  evals.WriteString(styleFail.Render(string(c))); err != nil { return "" ,err  }
+        }
     }
-    t.Row("Evaluations:", evaluations.String())
-    return t.Render()
+    t.Row("Evaluations:", evals.String())
+    return t.Render(), nil
 }
 
 func formatFailedSubmission(s *core.SubmissionResult, t core.Status) string {

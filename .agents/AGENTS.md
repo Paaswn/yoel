@@ -221,6 +221,3 @@ gofmt -w ./internal
 go test ./...
 go vet ./...
 ```
-
-Do not add production dependencies unless the standard library is demonstrably
-insufficient and the owner approves the dependency first.
