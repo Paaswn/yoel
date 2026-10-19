@@ -30,7 +30,11 @@ func newSubmitCommand() *cobra.Command {
                     return err
                 }
 			    if isTTY(cmd) {
-					_, err := lg.Fprintf(cmd.ErrOrStderr(), "Submitting %s with file %s...\n", problem.CodeName, filepath.Base( problem.SourcePath ))
+					relative, err := filepath.Rel( problem.DirectoryPath, problem.SourcePath )
+					if err != nil {
+					    return err
+					}
+					_, err = lg.Fprintf(cmd.ErrOrStderr(), "Submitting %s with file %s...\n", problem.CodeName, relative )
 					if err != nil {
 					    return err
 					}
