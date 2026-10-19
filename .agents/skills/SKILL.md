@@ -7,6 +7,18 @@ description: Safely create a Git commit after Codex completes user-authorized co
 
 Create a focused, reviewable commit for completed work. Treat the installed skill as permission to commit successfully verified task changes without asking again; never treat it as permission to push or alter history.
 
+## Commit Format
+
+commit always start with tag following this list
+
+> - feat: new capabilities or intentional feature changes
+> - fix: bug fixes
+> - refactor: internal changes without behavioral differences
+> - chore: maintenance and tooling
+> - docs: documentation
+> - test: tests
+> - perf: performance improvements
+
 ## Workflow
 
 1. Confirm the working directory is inside a Git repository with `git rev-parse --show-toplevel`. If it is not, report that no commit was created. Do not initialize a repository unless the user explicitly requests it.
