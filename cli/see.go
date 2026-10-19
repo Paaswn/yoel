@@ -22,7 +22,7 @@ func newSeeCommand() *cobra.Command {
         Args: cobra.ExactArgs(1),
         RunE: func(cmd *cobra.Command, args []string) error {
             query := args[0]
-            single := func(ctx context.Context, session core.SavedSession, problem core.ProblemLite, reg *core.Registry) error {
+            single := func(ctx context.Context, session core.SavedSession, problem *core.ProblemLite, reg *core.Registry) error {
                 jsonOutput, err := cmd.Flags().GetBool("json")
                 if err != nil {
                     return err
@@ -62,12 +62,12 @@ func newSeeCommand() *cobra.Command {
                         return err
                     }
                     if len(problems) == 1 {
-                        return singleFunc(cmd.Context(), session, problems[0], reg)
+                        return singleFunc(cmd.Context(), session, &problems[0], reg)
                     } else if jsonOutput {
                         return json.NewEncoder(cmd.OutOrStdout()).Encode(problems)
                     }  else if disableInteractive {
                         for _, problem := range problems {
-                            if err := singleFunc(cmd.Context(), session, problem, reg); err != nil {
+                            if err := singleFunc(cmd.Context(), session, &problem, reg); err != nil {
                                 return err
                             }
                         }
@@ -76,7 +76,7 @@ func newSeeCommand() *cobra.Command {
                         if err != nil {
                             return err
                         }
-                        return singleFunc(cmd.Context(), session, problem, reg)
+                        return singleFunc(cmd.Context(), session, &problem, reg)
                     }
                     return nil
                 },

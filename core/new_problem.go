@@ -17,7 +17,7 @@ import (
 )
 
 const yoelHiddenDir string = ".yoel"
-func CreateProblem(ctx context.Context, session SavedSession, problem ProblemLite, reg *Registry) error {
+func CreateProblem(ctx context.Context, session SavedSession, problem *ProblemLite, reg *Registry) error {
     client, err := gapi.NewClient(DefaultGraderURL, nil)
     if err != nil {
         return err
@@ -29,7 +29,7 @@ func CreateProblem(ctx context.Context, session SavedSession, problem ProblemLit
     return createProblem(ctx, cwd, problem, client.WithToken(session.Token), reg)
 }
 
-func createProblem(ctx context.Context, cwd string, problem ProblemLite, client *gapi.Client, reg *Registry) error {
+func createProblem(ctx context.Context, cwd string, problem *ProblemLite, client *gapi.Client, reg *Registry) error {
     c, cancel := context.WithTimeout(ctx, TimeOut)
     defer cancel()
     rawPDF, err := client.DownloadProblemPDF(c, problem.ID)
@@ -74,12 +74,21 @@ func createProblem(ctx context.Context, cwd string, problem ProblemLite, client 
     if err := os.Rename(temp, dirPath); err != nil {
         return err
     }
+    err = openWithDefaultViewer(filepath.Join(dirPath, pdfName))
+    if err != nil {
+        return err
+    }
     if err := reg.SetProblemPath(problem.ID, sourcePath, dirPath); err != nil {
         return err
     }
-    return openWithDefaultViewer(filepath.Join(dirPath, pdfName))
+    setLocalProblemPath(problem, sourcePath, dirPath)
+    return nil
 }
 
+func setLocalProblemPath(problem *ProblemLite, sourcePath string, dirPath string) {
+    problem.DirectoryPath = dirPath
+    problem.SourcePath = sourcePath
+}
 func extractProblemIntoDir(dir string, attachment gapi.ProblemFile) (string, error ) {
 	archive, err := zip.NewReader(bytes.NewReader(attachment.Data), int64(len(attachment.Data)))
 	if err != nil {

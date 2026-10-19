@@ -23,7 +23,7 @@ func newSubmitCommand() *cobra.Command {
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 		    query := args[0]
-			single := func(ctx context.Context, session core.SavedSession, problem core.ProblemLite, registry *core.Registry) error {
+			single := func(ctx context.Context, session core.SavedSession, problem *core.ProblemLite, registry *core.Registry) error {
 			    var submission core.SubmissionResult
 				jsonOutput, err := cmd.Flags().GetBool("json")
                 if err != nil {
@@ -32,7 +32,7 @@ func newSubmitCommand() *cobra.Command {
 			    if isTTY(cmd) {
 					lg.Fprintf(cmd.ErrOrStderr(), "Submitting %s with file %s...\n", problem.CodeName, filepath.Base( problem.SourcePath ))
 					s := spinner.New().Context(cmd.Context()).WithOutput(cmd.ErrOrStderr()).Title("Waiting for respone").ActionWithErr(func(c context.Context) error {
-        				sub, err := core.SubmitProblem(c, session, problem, registry)
+        				sub, err := core.SubmitProblem(c, session, *problem, registry)
                         submission = sub
                         return err
 					})
@@ -40,7 +40,7 @@ func newSubmitCommand() *cobra.Command {
     					return err
 					}
 				} else {
-    				sub, err := core.SubmitProblem(cmd.Context(), session, problem, registry)
+    				sub, err := core.SubmitProblem(cmd.Context(), session, *problem, registry)
                     submission = sub
                     if err != nil {
                         return err
@@ -57,14 +57,14 @@ func newSubmitCommand() *cobra.Command {
                 single: single,
                 multiple: func (cmd *cobra.Command, session core.SavedSession, problems []core.ProblemLite, reg *core.Registry, singleFunc handleSingleProblem) error {
                     if len(problems) == 1 {
-                        return singleFunc(cmd.Context(), session, problems[0], reg)
+                        return singleFunc(cmd.Context(), session, &problems[0], reg)
                     }
                     if isTTY(cmd) {
                         problem, err := problemListInteractive(cmd, problems)
                         if err != nil {
                             return err
                         }
-                        return singleFunc(cmd.Context(), session, problem, reg)
+                        return singleFunc(cmd.Context(), session, &problem, reg)
                     } else {
                         return fmt.Errorf("query \"%s\" matched %v problems, but the output isn't interactive; submit using a problem ID or provide more specific problem's name.", query, len(problems))
                     }

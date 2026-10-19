@@ -10,6 +10,7 @@ import (
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
+	lg "charm.land/lipgloss/v2"
 	"github.com/Paaswn/yoel/core"
 	"github.com/spf13/cobra"
 )
@@ -22,7 +23,7 @@ func newListCommand() *cobra.Command {
         Use:   "list",
         Short: "Show list of problems from grader",
         RunE: func(cmd *cobra.Command, args []string) error {
-            single := func(ctx context.Context, session core.SavedSession, problem core.ProblemLite, reg *core.Registry) error {
+            single := func(ctx context.Context, session core.SavedSession, problem *core.ProblemLite, reg *core.Registry) error {
                 jsonOutput, err := cmd.Flags().GetBool("json")
                 if err != nil {
                     return err
@@ -34,9 +35,14 @@ func newListCommand() *cobra.Command {
                 if jsonOutput {
                     return json.NewEncoder(cmd.OutOrStdout()).Encode(problem)
                 } else if disableInteractive  {
-                    return problemPrint(cmd.OutOrStdout(), problem)
+                    return problemPrint(cmd.OutOrStdout(), *problem)
                 } else {
-                    return core.CreateProblem(ctx, session, problem, reg)
+                    err = core.CreateProblem(ctx, session, problem, reg)
+                    if err != nil {
+                        return err
+                    }
+                    _, err := lg.Fprintf(cmd.ErrOrStderr(), lg.NewStyle().Faint(true).Render("Problem successfully created at %s"), problem.DirectoryPath)
+                    return err
                 }
             }
             resFunc := resultFunc{
@@ -54,7 +60,7 @@ func newListCommand() *cobra.Command {
                         return json.NewEncoder(cmd.OutOrStdout()).Encode(problems)
                     } else if disableInteractive {
                         for _, problem := range problems {
-                            if err := singleFunc(cmd.Context(), session, problem, reg); err != nil {
+                            if err := singleFunc(cmd.Context(), session, &problem, reg); err != nil {
                                 return err
                             }
                         }
@@ -63,7 +69,7 @@ func newListCommand() *cobra.Command {
                         if err != nil {
                             return err
                         }
-                        return singleFunc(cmd.Context(), session, problem, reg)
+                        return singleFunc(cmd.Context(), session, &problem, reg)
                     }
                     return nil
                 },
