@@ -27,9 +27,9 @@ func newRegistryForTest(t *testing.T) *Registry {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-    	if err := r.Close(); err != nil {
-            t.Errorf("closing registry: %v", err)
-        }
+		if err := r.Close(); err != nil {
+			t.Errorf("closing registry: %v", err)
+		}
 	})
 	return r
 }

@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bufio"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,23 +17,61 @@ import (
 func newListCommand() *cobra.Command {
     var disableInteractive bool
     var maxRow int
-    var filter string
+    var jsonOutput bool
     command := &cobra.Command{
         Use:   "list",
         Short: "Show list of problems from grader",
         RunE: func(cmd *cobra.Command, args []string) error {
-            query := ""
-            if cmd.Flags().Changed("filter") {
-                res, err := cmd.Flags().GetString("filter")
+            single := func(ctx context.Context, session core.SavedSession, problem core.ProblemLite, reg *core.Registry) error {
+                jsonOutput, err := cmd.Flags().GetBool("json")
                 if err != nil {
                     return err
                 }
-                query = res
+                disableInteractive, err := cmd.Flags().GetBool("disable-interactive")
+                if err != nil {
+                    return err
+                }
+                if jsonOutput {
+                    return json.NewEncoder(cmd.OutOrStdout()).Encode(problem)
+                } else if disableInteractive  {
+                    return problemPrint(cmd.OutOrStdout(), problem)
+                } else {
+                    return core.CreateProblem(ctx, session, problem, reg)
+                }
             }
-            return queryWithResFunc(cmd, query, core.CreateProblem)
+            resFunc := resultFunc{
+                single: single,
+                multiple: func (cmd *cobra.Command, session core.SavedSession, problems []core.ProblemLite, reg *core.Registry, singleFunc handleSingleProblem) error {
+                    jsonOutput, err := cmd.Flags().GetBool("json")
+                    if err != nil {
+                        return err
+                    }
+                    disableInteractive, err := cmd.Flags().GetBool("disable-interactive")
+                    if err != nil {
+                        return err
+                    }
+                    if jsonOutput {
+                        return json.NewEncoder(cmd.OutOrStdout()).Encode(problems)
+                    } else if disableInteractive {
+                        for _, problem := range problems {
+                            if err := singleFunc(cmd.Context(), session, problem, reg); err != nil {
+                                return err
+                            }
+                        }
+                    } else {
+                        problem, err := problemListInteractive(cmd, problems)
+                        if err != nil {
+                            return err
+                        }
+                        return singleFunc(cmd.Context(), session, problem, reg)
+                    }
+                    return nil
+                },
+            }
+            return queryWithResFunc(cmd, "", resFunc)
         },
     }
-    command.Flags().StringVarP(&filter, "filter", "f", "", "filter problem name")
+    command.Flags().BoolVarP(&jsonOutput, "json", "j", false,  "print output as json")
     command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
     command.Flags().IntVarP(&maxRow, "max-row", "m", 10, "maximum number of rows to display")
     return command
@@ -65,17 +105,23 @@ func problemListInteractive(cmd *cobra.Command, problems []core.ProblemLite) ( c
     return problems[selected], nil
 }
 
-func problemListPrint(w io.Writer, problems []core.ProblemLite) error {
-    writer := bufio.NewWriterSize(w, 4096)
-    for _, q := range problems {
-        writer.WriteString(q.CodeName)
-        fmt.Fprint(writer, " " , q.ID)
-        writer.WriteRune('\n')
-    }
-    if err := writer.Flush(); err != nil {
-        return err
-    }
-    return nil
+func problemPrint(writer io.Writer, problem core.ProblemLite) error {
+     _, err := fmt.Fprintf(writer, "%s %d\n", problem.CodeName, problem.ID)
+	return err
+}
+
+func problemListPrint(cmd *cobra.Command, problems []core.ProblemLite, jsonOutput bool) error {
+	if jsonOutput {
+		return json.NewEncoder(cmd.OutOrStdout()).Encode(problems)
+	}
+
+	writer := bufio.NewWriterSize(cmd.OutOrStdout(), 4096)
+	for _, problem := range problems {
+		if err := problemPrint(writer, problem); err != nil {
+			return err
+		}
+	}
+	return writer.Flush()
 }
 
 var (

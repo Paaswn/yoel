@@ -56,8 +56,9 @@ func TestSubmitProblem(t *testing.T) {
 			case "grader_error":
 				final.GraderComment = &grader
 			}
-			var posts, polls, metadata atomic.Int32 
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { if r.Header.Get("Authorization") != "Bearer fake-token" {
+			var posts, polls, metadata atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Authorization") != "Bearer fake-token" {
 					t.Error("missing fake bearer authentication")
 				}
 				w.Header().Set("Content-Type", "application/json")
