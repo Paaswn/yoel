@@ -32,8 +32,8 @@ func newSeeCommand() *cobra.Command {
 				} else {
 					rows := make([][]string, 0)
 					row := 0
-					v := reflect.ValueOf(problem)
-					ty := reflect.TypeOf(problem)
+					v := reflect.ValueOf(*problem)
+					ty := reflect.TypeOf(*problem)
 					for i := 0; i < v.NumField(); i++ {
 						fType := ty.Field(i)
 						fVal := v.Field(i)
