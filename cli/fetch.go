@@ -6,19 +6,19 @@ import (
 )
 
 func newFetchCommand() *cobra.Command {
-    return &cobra.Command{
-        Use:   "fetch",
-        Short: "Fetch the latest problems from the server",
-        RunE: func(cmd *cobra.Command, args []string) error {
-            reg, err := core.NewRegistry()
-            if err != nil {
-                return err
-            }
-            session, err := cliLoadSession(cmd)
-            if err != nil {
-                return err
-            }
-            return reg.UpdateAllProblems(cmd.Context(), session)
-        },
-    }
+	return &cobra.Command{
+		Use:   "fetch",
+		Short: "Fetch the latest problems from the server",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			reg, err := core.NewRegistry()
+			if err != nil {
+				return err
+			}
+			session, err := cliLoadSession(cmd)
+			if err != nil {
+				return err
+			}
+			return reg.UpdateAllProblems(cmd.Context(), session)
+		},
+	}
 }

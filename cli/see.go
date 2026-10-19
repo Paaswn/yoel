@@ -13,79 +13,79 @@ import (
 )
 
 func newSeeCommand() *cobra.Command {
-    var jsonOutput bool
-    var disableInteractive bool
-    var maxRow int
-    cmd := &cobra.Command{
-        Use:   "see",
-        Short: "Display problem informations",
-        Args: cobra.ExactArgs(1),
-        RunE: func(cmd *cobra.Command, args []string) error {
-            query := args[0]
-            single := func(ctx context.Context, session core.SavedSession, problem *core.ProblemLite, reg *core.Registry) error {
-                jsonOutput, err := cmd.Flags().GetBool("json")
-                if err != nil {
-                    return err
-                }
-                if jsonOutput {
-                    return json.NewEncoder(cmd.OutOrStdout()).Encode(problem)
-                } else {
-                    rows := make([][]string, 0)
-                    row := 0
-                    v := reflect.ValueOf(problem)
-                    ty := reflect.TypeOf(problem)
-                    for i := 0; i < v.NumField(); i++ {
-                        fType := ty.Field(i)
-                        fVal := v.Field(i)
-                        if fType.Name == "SortOrder" {
-                            continue
-                        }
-                        rows = append(rows, []string{})
-                        rows[row] = append(rows[row], fType.Name)
-                        rows[row] = append(rows[row], fmt.Sprintf( "%v", fVal.Interface() ))
-                        row++
-                    }
-                    t := table.New().Rows(rows...).Border(lipgloss.HiddenBorder())
-                    _, err := lipgloss.Fprintln(cmd.OutOrStdout(), t.Render())
-                    return err
-                }
-            }
-            resFunc :=  resultFunc {
-                single: single,
-                multiple: func (cmd *cobra.Command, session core.SavedSession, problems []core.ProblemLite, reg *core.Registry, singleFunc handleSingleProblem) error {
-                    jsonOutput, err := cmd.Flags().GetBool("json")
-                    if err != nil {
-                        return err
-                    }
-                    disableInteractive, err := cmd.Flags().GetBool("disable-interactive")
-                    if err != nil {
-                        return err
-                    }
-                    if len(problems) == 1 {
-                        return singleFunc(cmd.Context(), session, &problems[0], reg)
-                    } else if jsonOutput {
-                        return json.NewEncoder(cmd.OutOrStdout()).Encode(problems)
-                    }  else if disableInteractive {
-                        for _, problem := range problems {
-                            if err := singleFunc(cmd.Context(), session, &problem, reg); err != nil {
-                                return err
-                            }
-                        }
-                    } else {
-                        problem, err := problemListInteractive(cmd, problems)
-                        if err != nil {
-                            return err
-                        }
-                        return singleFunc(cmd.Context(), session, &problem, reg)
-                    }
-                    return nil
-                },
-            }
-            return queryWithResFunc(cmd, query, resFunc)
-        },
-    }
-    cmd.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
-    cmd.Flags().IntVarP(&maxRow, "max-row", "m", 10, "maximum number of rows to display")
-    cmd.Flags().BoolVarP(&jsonOutput, "json", "j" ,false, "format output as json")
-    return cmd
+	var jsonOutput bool
+	var disableInteractive bool
+	var maxRow int
+	cmd := &cobra.Command{
+		Use:   "see",
+		Short: "Display problem informations",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			query := args[0]
+			single := func(ctx context.Context, session core.SavedSession, problem *core.ProblemLite, reg *core.Registry) error {
+				jsonOutput, err := cmd.Flags().GetBool("json")
+				if err != nil {
+					return err
+				}
+				if jsonOutput {
+					return json.NewEncoder(cmd.OutOrStdout()).Encode(problem)
+				} else {
+					rows := make([][]string, 0)
+					row := 0
+					v := reflect.ValueOf(problem)
+					ty := reflect.TypeOf(problem)
+					for i := 0; i < v.NumField(); i++ {
+						fType := ty.Field(i)
+						fVal := v.Field(i)
+						if fType.Name == "SortOrder" {
+							continue
+						}
+						rows = append(rows, []string{})
+						rows[row] = append(rows[row], fType.Name)
+						rows[row] = append(rows[row], fmt.Sprintf("%v", fVal.Interface()))
+						row++
+					}
+					t := table.New().Rows(rows...).Border(lipgloss.HiddenBorder())
+					_, err := lipgloss.Fprintln(cmd.OutOrStdout(), t.Render())
+					return err
+				}
+			}
+			resFunc := resultFunc{
+				single: single,
+				multiple: func(cmd *cobra.Command, session core.SavedSession, problems []core.ProblemLite, reg *core.Registry, singleFunc handleSingleProblem) error {
+					jsonOutput, err := cmd.Flags().GetBool("json")
+					if err != nil {
+						return err
+					}
+					disableInteractive, err := cmd.Flags().GetBool("disable-interactive")
+					if err != nil {
+						return err
+					}
+					if len(problems) == 1 {
+						return singleFunc(cmd.Context(), session, &problems[0], reg)
+					} else if jsonOutput {
+						return json.NewEncoder(cmd.OutOrStdout()).Encode(problems)
+					} else if disableInteractive {
+						for _, problem := range problems {
+							if err := singleFunc(cmd.Context(), session, &problem, reg); err != nil {
+								return err
+							}
+						}
+					} else {
+						problem, err := problemListInteractive(cmd, problems)
+						if err != nil {
+							return err
+						}
+						return singleFunc(cmd.Context(), session, &problem, reg)
+					}
+					return nil
+				},
+			}
+			return queryWithResFunc(cmd, query, resFunc)
+		},
+	}
+	cmd.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
+	cmd.Flags().IntVarP(&maxRow, "max-row", "m", 10, "maximum number of rows to display")
+	cmd.Flags().BoolVarP(&jsonOutput, "json", "j", false, "format output as json")
+	return cmd
 }

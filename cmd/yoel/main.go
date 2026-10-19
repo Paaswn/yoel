@@ -14,11 +14,11 @@ import (
 var version = "dev"
 
 func main() {
-    ctx, stop := signal.NotifyContext(
-        context.Background(),
-        os.Interrupt,
-    )
-    defer stop()
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+	)
+	defer stop()
 	if err := cli.NewRootCommandWithVersion(version).ExecuteContext(ctx); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

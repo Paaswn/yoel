@@ -22,8 +22,8 @@ type Problem struct {
 	HasTestcase        bool              `json:"has_testcase"`
 	HasAttachment      bool              `json:"has_attachment"`
 	PermittedLanguages []ProblemLanguage `json:"permitted_languages"`
-	CodeName               string            `json:"name"`
-	PrettyName           string            `json:"full_name"`
+	CodeName           string            `json:"name"`
+	PrettyName         string            `json:"full_name"`
 }
 
 // ProblemLanguage identifies a language permitted for a problem.
