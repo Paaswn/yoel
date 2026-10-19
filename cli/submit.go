@@ -22,7 +22,7 @@ func newSubmitCommand() *cobra.Command {
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 		    query := args[0]
-			resultFunc := func(ctx context.Context, session core.SavedSession, problem core.ProblemLite, registry *core.Registry) error {
+			single := func(ctx context.Context, session core.SavedSession, problem core.ProblemLite, registry *core.Registry) error {
 			    var submission core.SubmissionResult
 			    if isTTY(cmd) {
 					lg.Fprintf(cmd.ErrOrStderr(), "Submitting %s with file %s...\n", problem.CodeName, filepath.Base( problem.SourcePath ))
@@ -44,7 +44,11 @@ func newSubmitCommand() *cobra.Command {
 				_, err := lg.Fprintln(cmd.OutOrStdout(), formatSubmission(&submission))
 				return err
 			}
-			return queryWithResFunc(cmd, query, resultFunc)
+            resFunc := resultFunc{
+                single: single,
+                multiple: problemListWithResFunc,
+            }
+			return queryWithResFunc(cmd, query, resFunc)
 		},
 	}
 	command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")

@@ -29,7 +29,11 @@ func newListCommand() *cobra.Command {
                 }
                 query = res
             }
-            return queryWithResFunc(cmd, query, core.CreateProblem)
+            resFunc := resultFunc{
+                single: core.CreateProblem,
+                multiple: problemListWithResFunc,
+            }
+            return queryWithResFunc(cmd, query, resFunc)
         },
     }
     command.Flags().StringVarP(&filter, "filter", "f", "", "filter problem name")

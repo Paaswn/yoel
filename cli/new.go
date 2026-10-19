@@ -17,7 +17,11 @@ func newNewCommand() *cobra.Command {
         Short: "Create a new problem",
         Args:  cobra.ExactArgs(1),
         RunE: func(cmd *cobra.Command, args []string) error {
-            return queryWithResFunc(cmd, args[0], core.CreateProblem)
+            resFunc := resultFunc{
+                single: core.CreateProblem,
+                multiple: problemListWithResFunc,
+            }
+            return queryWithResFunc(cmd, args[0], resFunc)
         },
     }
     command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
@@ -25,7 +29,12 @@ func newNewCommand() *cobra.Command {
     return command
 }
 
-type resultFunc func(context.Context, core.SavedSession, core.ProblemLite, *core.Registry) error
+type resultFunc struct {
+    single handleSingleProblem
+    multiple handleMultipleProblems
+}
+type handleMultipleProblems func(*cobra.Command, core.SavedSession, []core.ProblemLite, *core.Registry, handleSingleProblem) error
+type handleSingleProblem func(context.Context, core.SavedSession, core.ProblemLite, *core.Registry) error
 func queryWithResFunc(cmd *cobra.Command, query string, resFunc resultFunc) error {
     id, parseError := strconv.Atoi(query)
     if parseError != nil && !errors.Is(parseError, strconv.ErrSyntax) {
@@ -45,33 +54,38 @@ func queryWithResFunc(cmd *cobra.Command, query string, resFunc resultFunc) erro
         if err != nil {
             return err
         }
-        return resFunc(cmd.Context(), session, problem, reg)
+        return resFunc.single(cmd.Context(), session, problem, reg)
     } else {
         problems, err := reg.QueryByName(query)
         if err != nil {
             return err
         }
-        if len(problems) == 1 {
-            return resFunc(cmd.Context(), session, problems[0], reg)
-        }
-        disableInteractive, err := cmd.Flags().GetBool("disable-interactive")
+        return resFunc.multiple(cmd, session, problems, reg, resFunc.single)
+    }
+}
+
+
+func problemListWithResFunc(cmd *cobra.Command, session core.SavedSession, problems []core.ProblemLite, reg *core.Registry, resFunc handleSingleProblem) error {
+    if len(problems) == 1 {
+        return resFunc(cmd.Context(), session, problems[0], reg)
+    }
+    disableInteractive, err := cmd.Flags().GetBool("disable-interactive")
+    if err != nil {
+        return err
+    }
+    json, err := cmd.Flags().GetBool("json")
+    if err != nil {
+        return err
+    }
+    if !disableInteractive && !json && isTTY(cmd) {
+        problem, err := problemListInteractive(cmd, problems)
         if err != nil {
             return err
         }
-        json, err := cmd.Flags().GetBool("json")
-        if err != nil {
+        return resFunc(cmd.Context(), session, problem, reg)
+    } else {
+        if err := problemListPrint(cmd, problems, json); err != nil {
             return err
-        }
-        if !disableInteractive && !json && isTTY(cmd) {
-            problem, err := problemListInteractive(cmd, problems)
-            if err != nil {
-                return err
-            }
-            return resFunc(cmd.Context(), session, problem, reg)
-        } else {
-            if err := problemListPrint(cmd, problems, json); err != nil {
-                return err
-            }
         }
     }
     return nil
