@@ -69,7 +69,7 @@ func TestSubmitProblem(t *testing.T) {
 						w.WriteHeader(http.StatusForbidden)
 						return
 					}
-					// Metadata order differs from evaluation order: join by ID.
+					// Preserve metadata order independently of evaluation order.
 					_, _ = w.Write([]byte(`[{"id":2,"num":2,"group":8},{"id":1,"num":1,"group":3}]`))
 				case r.Method == http.MethodPost && r.URL.Path == "/api/v1/problems/42/submissions":
 					posts.Add(1)
@@ -133,21 +133,16 @@ func TestSubmitProblem(t *testing.T) {
 					if got.Points == nil || *got.Points != points {
 						t.Error("lost final score")
 					}
-					var want []TestCaseResult
-					switch tc.name {
-					case "testcase fallback":
-						want = []TestCaseResult{
-							{Group: 1, TestcaseID: 1, Result: evaluation},
-							{Group: 2, TestcaseID: 2, Result: ""},
-						}
-					default:
-						want = []TestCaseResult{
-							{Group: 3, TestcaseID: 1, Result: evaluation},
-							{Group: 8, TestcaseID: 2, Result: ""},
+					var want []gapi.Testcase
+					if tc.failure != "metadata" {
+						group8, group3 := 8, 3
+						want = []gapi.Testcase{
+							{ID: 2, Num: 2, Group: &group8},
+							{ID: 1, Num: 1, Group: &group3},
 						}
 					}
 					if !reflect.DeepEqual(got.TestCaseResults, want) {
-						t.Errorf("evaluations = %#v, want %#v", got.TestCaseResults, want)
+						t.Errorf("testcase metadata = %#v, want %#v", got.TestCaseResults, want)
 					}
 				case CompilationError:
 					if got.CompilerMessage == nil || *got.CompilerMessage != compiler {
