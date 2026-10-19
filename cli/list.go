@@ -32,11 +32,7 @@ func newListCommand() *cobra.Command {
                     return err
                 }
                 if jsonOutput {
-                    data, err := problem.ToJSON()
-                    if err != nil {
-                        return err
-                    }
-                    return json.NewEncoder(cmd.OutOrStdout()).Encode(data)
+                    return json.NewEncoder(cmd.OutOrStdout()).Encode(problem)
                 } else if disableInteractive  {
                     return problemPrint(cmd.OutOrStdout(), problem)
                 } else {

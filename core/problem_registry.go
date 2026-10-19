@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -90,9 +89,6 @@ type ProblemLite struct {
 	IsOnLocal     bool    `json:"is_on_local"`
 }
 
-func (p ProblemLite) ToJSON() ([]byte, error) {
-	return json.Marshal(p)
-}
 func (r *Registry) init() error {
 	_, err := r.db.Exec(`
         CREATE TABLE IF NOT EXISTS problems (
