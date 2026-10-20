@@ -28,7 +28,7 @@ func CreateProblem(ctx context.Context, session SavedSession, problem *ProblemLi
 	if err != nil {
 		return err
 	}
-	return createProblem(ctx, cwd, problem, client.WithToken(session.Token), reg)
+	return createProblem(args.Ctx, cwd, args.Problem,  client.WithToken(args.Session.Token), args.Reg, args.Force)
 }
 
 func createProblem(ctx context.Context, cwd string, problem *ProblemLite, client *gapi.Client, reg *Registry) error {

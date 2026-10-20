@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"os"
 
 	"github.com/Paaswn/yoel/core"
@@ -61,13 +60,6 @@ func cliLoadSession(cmd *cobra.Command) (core.SavedSession, error) {
 	switch err {
 	case nil:
 	case core.SessionExpiredError:
-		confirm, err := yesNoPrompt(cmd, "Session expired. Login again ?")
-		if err != nil {
-			return core.SavedSession{}, err
-		}
-		if !confirm {
-			return core.SavedSession{}, errors.New("Login prompt was declined")
-		}
 		if err := runLoginForm(cmd); err != nil {
 			return core.SavedSession{}, err
 		}
