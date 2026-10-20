@@ -41,7 +41,7 @@ func newListCommand() *cobra.Command {
 				} else {
 					err = core.CreateProblem(ctx, session, problem, reg, core.CreateProblemOption{Force: force, NoPDF: noPDF})
 					if errors.Is(err, core.ProblemExistErr) {
-						confirm, promptErr := yesNoPrompt(cmd, "Problem path already exists. Create anyway?")
+						confirm, promptErr := yesNoPrompt(cmd, "Problem's path already exists. Overwrite?")
 						if promptErr != nil {
 							return promptErr
 						}
