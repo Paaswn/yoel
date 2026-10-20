@@ -19,7 +19,15 @@ import (
 
 const yoelHiddenDir string = ".yoel"
 
-func CreateProblem(ctx context.Context, session SavedSession, problem *ProblemLite, reg *Registry) error {
+type CreateProblemArgs struct {
+	Ctx     context.Context
+	Session SavedSession
+	Problem *ProblemLite
+	Reg     *Registry
+	Force   bool
+}
+
+func CreateProblem(args CreateProblemArgs) error {
 	client, err := gapi.NewClient(DefaultGraderURL, nil)
 	if err != nil {
 		return err
@@ -30,8 +38,8 @@ func CreateProblem(ctx context.Context, session SavedSession, problem *ProblemLi
 	}
 	return createProblem(args.Ctx, cwd, args.Problem,  client.WithToken(args.Session.Token), args.Reg, args.Force)
 }
-
-func createProblem(ctx context.Context, cwd string, problem *ProblemLite, client *gapi.Client, reg *Registry) error {
+var ProblemExistErr = errors.New("problem path already exists")
+func createProblem(ctx context.Context, cwd string, problem *ProblemLite, client *gapi.Client, reg *Registry, force bool) error {
 	c, cancel := context.WithTimeout(ctx, TimeOut)
 	defer cancel()
 	rawPDF, err := client.DownloadProblemPDF(c, problem.ID)
@@ -73,6 +81,20 @@ func createProblem(ctx context.Context, cwd string, problem *ProblemLite, client
 	}
 	dirPath := filepath.Join(cwd, problem.CodeName)
 	sourcePath := filepath.Join(dirPath, source)
+
+	if _, statErr := os.Stat(dirPath); statErr == nil {
+		if !force {
+			return ProblemExistErr
+		}
+
+		if err := os.RemoveAll(dirPath); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(statErr) {
+		return statErr
+	}
+
+	
 	if err := os.Rename(temp, dirPath); err != nil {
 		return err
 	}

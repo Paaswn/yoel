@@ -19,6 +19,7 @@ func newListCommand() *cobra.Command {
 	var disableInteractive bool
 	var maxRow int
 	var jsonOutput bool
+	var force bool
 	command := &cobra.Command{
 		Use:   "list",
 		Short: "Show list of problems from grader",
@@ -37,7 +38,16 @@ func newListCommand() *cobra.Command {
 				} else if !isTTY(cmd) || disableInteractive {
 					return problemPrint(cmd.OutOrStdout(), *problem)
 				} else {
-					err = core.CreateProblem(ctx, session, problem, reg)
+					err = core.CreateProblem(core.CreateProblemArgs{Ctx: ctx, Session: session, Problem: problem, Reg: reg, Force: force})
+					if errors.Is(err, core.ProblemExistErr) {
+						confirm, err := yesNoPrompt(cmd, "Problem path already exists. Create anyway?")
+						if err != nil {
+							return err
+						}
+						if confirm {
+							err = core.CreateProblem(core.CreateProblemArgs{Ctx: ctx, Session: session, Problem: problem, Reg: reg, Force: true})
+						}
+					}
 					if err != nil {
 						return err
 					}
@@ -80,6 +90,7 @@ func newListCommand() *cobra.Command {
 	command.Flags().BoolVarP(&jsonOutput, "json", "j", false, "print output as json")
 	command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
 	command.Flags().IntVarP(&maxRow, "max-row", "m", 10, "maximum number of rows to display")
+	command.Flags().BoolVarP(&force, "force", "f", false, "format output as json")
 	return command
 }
 
