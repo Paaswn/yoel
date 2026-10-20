@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	gapi "github.com/Paaswn/yoel/graderapi"
+	"github.com/adrg/xdg"
 )
 
 func newRegistryForTest(t *testing.T) *Registry {
@@ -61,11 +62,31 @@ func assertRegistryProblems(t *testing.T, got, want []ProblemLite) {
 	}
 }
 
+func registryDataDirForTest(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	// UserDataDir uses XDG_DATA_HOME on Unix, HOME on macOS, and
+	// LocalAppData on Windows. All supported paths must stay inside root.
+	t.Setenv("XDG_DATA_HOME", root)
+	t.Setenv("HOME", root)
+	t.Setenv("LocalAppData", root)
+	xdg.Reload()
+	dir := xdg.DataHome
+	rel, err := filepath.Rel(root, dir)
+	if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		t.Fatalf("UserDataDir = %q, outside temporary directory %q", dir, root)
+	}
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func registryConfigDirForTest(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	// UserConfigDir uses XDG_CONFIG_HOME on Unix, HOME on macOS, and
-	// AppData on Windows. All supported paths must stay inside root.
+	// UserDataDir uses XDG_DATA_HOME on Unix, HOME on macOS, and
+	// LocalAppData on Windows. All supported paths must stay inside root.
 	t.Setenv("XDG_CONFIG_HOME", root)
 	t.Setenv("HOME", root)
 	t.Setenv("AppData", root)
@@ -75,16 +96,78 @@ func registryConfigDirForTest(t *testing.T) string {
 	}
 	rel, err := filepath.Rel(root, dir)
 	if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		t.Fatalf("UserConfigDir = %q, outside temporary directory %q", dir, root)
+		t.Fatalf("UserDataDir = %q, outside temporary directory %q", dir, root)
 	}
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
 	return dir
 }
+func TestMovingYoelDB(t *testing.T) {
+	configDir := registryConfigDirForTest(t)
+	dataDir := registryDataDirForTest(t)
+
+	oldPath := filepath.Join(configDir, Yoel, YoelDatabase)
+	newPath := filepath.Join(dataDir, Yoel, YoelDatabase)
+	if err := os.MkdirAll(filepath.Dir(oldPath), 0700); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := NewRegistryWithPath(oldPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = legacy.Close() })
+	p := ProblemLite{ID: 42, SortOrder: 7, BestScore: 75.5, CodeName: "arrays", PrettyName: "Array Problem",
+		SourcePath: "main.cpp", DirectoryPath: "arrays", IsOnLocal: true}
+	seedRegistryProblem(t, legacy, p)
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(newPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("destination before migration: stat error = %v, want not exist", err)
+	}
+
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+	if _, err := os.Stat(oldPath); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("legacy database after migration: stat error = %v, want not exist", err)
+	}
+	if _, err := os.Stat(newPath); err != nil {
+		t.Fatalf("migrated database: %v", err)
+	}
+	got, err := r.GetAllProblems()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRegistryProblems(t, got, []ProblemLite{p})
+	var order int
+	if err := r.db.QueryRow("SELECT sort_order FROM problems WHERE id = ?", p.ID).Scan(&order); err != nil {
+		t.Fatal(err)
+	}
+	if order != p.SortOrder {
+		t.Errorf("migrated sort order = %d, want %d", order, p.SortOrder)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	got, err = reopened.GetAllProblems()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRegistryProblems(t, got, []ProblemLite{p})
+}
 
 func TestRegistryNewRegistryPersistence(t *testing.T) {
-	configDir := registryConfigDirForTest(t)
+	dataDir := registryDataDirForTest(t)
 	r, err := NewRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +181,7 @@ func TestRegistryNewRegistryPersistence(t *testing.T) {
 	p := ProblemLite{ID: 42, SortOrder: 7, BestScore: 75.5, CodeName: "arrays", PrettyName: "Array Problem",
 		SourcePath: "main.cpp", DirectoryPath: "arrays", IsOnLocal: true}
 	seedRegistryProblem(t, r, p)
-	if _, err := os.Stat(filepath.Join(configDir, YoelCache, YoelDatabase)); err != nil {
+	if _, err := os.Stat(filepath.Join(dataDir, Yoel, YoelDatabase)); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.Close(); err != nil {
@@ -117,8 +200,8 @@ func TestRegistryNewRegistryPersistence(t *testing.T) {
 }
 
 func TestRegistryNewRegistryInvalidDirectory(t *testing.T) {
-	dir := registryConfigDirForTest(t)
-	if err := os.WriteFile(filepath.Join(dir, YoelCache), []byte("blocks directory creation"), 0600); err != nil {
+	dir := registryDataDirForTest(t)
+	if err := os.WriteFile(filepath.Join(dir, Yoel), []byte("blocks directory creation"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	r, err := NewRegistry()

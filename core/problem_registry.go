@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	gapi "github.com/Paaswn/yoel/graderapi"
+	"github.com/adrg/xdg"
 	_ "modernc.org/sqlite"
 )
 
@@ -20,21 +21,32 @@ var (
 	ErrProblemNotFound = fmt.Errorf("Registry may be outdated. Try running 'yoel fetch' to update the registry: %w", sql.ErrNoRows)
 )
 
-const YoelCache = "yoel"
-const YoelDatabase = "yoel.db"
+const (
+	Yoel         = "yoel"
+	YoelDatabase = "yoel.db"
+)
 
 func yoelNormalDBPath() (string, error) {
-	configDir, err := os.UserConfigDir()
+    
+	dbPath, err := xdg.DataFile(filepath.Join( Yoel, YoelDatabase ))
 	if err != nil {
 		return "", err
 	}
-	dirPath := filepath.Join(configDir, YoelCache)
-
-	if err := os.MkdirAll(dirPath, 0700); err != nil {
-		return "", err
-	}
-	dbPath := filepath.Join(dirPath, YoelDatabase)
-	return dbPath, nil
+	cfgdir, err := os.UserConfigDir()
+    if err != nil {
+        return "", err
+    } else {
+        oldPath := filepath.Join(cfgdir, Yoel, YoelDatabase)
+        
+        if _, err := os.Stat(oldPath); err == nil {
+            if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+                if err := os.Rename(oldPath, dbPath); err != nil {
+                    return "", err
+                }
+            }
+        }
+        return dbPath, nil
+    }
 }
 func NewRegistryWithPath(dbPath string) (*Registry, error) {
 	db, err := sql.Open("sqlite", dbPath)
