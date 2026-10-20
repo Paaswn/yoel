@@ -20,6 +20,7 @@ func newListCommand() *cobra.Command {
 	var maxRow int
 	var jsonOutput bool
 	var force bool
+	var noPDF bool
 	command := &cobra.Command{
 		Use:   "list",
 		Short: "Show list of problems from grader",
@@ -38,14 +39,14 @@ func newListCommand() *cobra.Command {
 				} else if !isTTY(cmd) || disableInteractive {
 					return problemPrint(cmd.OutOrStdout(), *problem)
 				} else {
-					err = core.CreateProblem(core.CreateProblemArgs{Ctx: ctx, Session: session, Problem: problem, Reg: reg, Force: force})
+					err = core.CreateProblem(ctx, session, problem, reg, core.CreateProblemOption{Force: force, NoPDF: noPDF})
 					if errors.Is(err, core.ProblemExistErr) {
-						confirm, err := yesNoPrompt(cmd, "Problem path already exists. Create anyway?")
-						if err != nil {
-							return err
+						confirm, promptErr := yesNoPrompt(cmd, "Problem path already exists. Create anyway?")
+						if promptErr != nil {
+							return promptErr
 						}
 						if confirm {
-							err = core.CreateProblem(core.CreateProblemArgs{Ctx: ctx, Session: session, Problem: problem, Reg: reg, Force: true})
+							err = core.CreateProblem(ctx, session, problem, reg, core.CreateProblemOption{Force: true, NoPDF: noPDF})
 						}
 					}
 					if err != nil {
@@ -91,6 +92,7 @@ func newListCommand() *cobra.Command {
 	command.Flags().BoolVarP(&disableInteractive, "disable-interactive", "d", false, "disable interactive mode")
 	command.Flags().IntVarP(&maxRow, "max-row", "m", 10, "maximum number of rows to display")
 	command.Flags().BoolVarP(&force, "force", "f", false, "format output as json")
+	command.Flags().BoolVar(&noPDF, "no-pdf", false, "save the PDF without opening its viewer")
 	return command
 }
 

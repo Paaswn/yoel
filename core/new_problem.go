@@ -19,15 +19,12 @@ import (
 
 const yoelHiddenDir string = ".yoel"
 
-type CreateProblemArgs struct {
-	Ctx     context.Context
-	Session SavedSession
-	Problem *ProblemLite
-	Reg     *Registry
-	Force   bool
+type CreateProblemOption struct {
+	Force bool
+	NoPDF bool // Save the PDF without opening its viewer.
 }
 
-func CreateProblem(args CreateProblemArgs) error {
+func CreateProblem(ctx context.Context, session SavedSession, problem *ProblemLite, reg *Registry, option CreateProblemOption) error {
 	client, err := gapi.NewClient(DefaultGraderURL, nil)
 	if err != nil {
 		return err
@@ -36,10 +33,12 @@ func CreateProblem(args CreateProblemArgs) error {
 	if err != nil {
 		return err
 	}
-	return createProblem(args.Ctx, cwd, args.Problem,  client.WithToken(args.Session.Token), args.Reg, args.Force)
+	return createProblem(ctx, cwd, problem, client.WithToken(session.Token), reg, option)
 }
+
 var ProblemExistErr = errors.New("problem path already exists")
-func createProblem(ctx context.Context, cwd string, problem *ProblemLite, client *gapi.Client, reg *Registry, force bool) error {
+
+func createProblem(ctx context.Context, cwd string, problem *ProblemLite, client *gapi.Client, reg *Registry, option CreateProblemOption) error {
 	c, cancel := context.WithTimeout(ctx, TimeOut)
 	defer cancel()
 	rawPDF, err := client.DownloadProblemPDF(c, problem.ID)
@@ -83,7 +82,7 @@ func createProblem(ctx context.Context, cwd string, problem *ProblemLite, client
 	sourcePath := filepath.Join(dirPath, source)
 
 	if _, statErr := os.Stat(dirPath); statErr == nil {
-		if !force {
+		if !option.Force {
 			return ProblemExistErr
 		}
 
@@ -94,13 +93,13 @@ func createProblem(ctx context.Context, cwd string, problem *ProblemLite, client
 		return statErr
 	}
 
-	
 	if err := os.Rename(temp, dirPath); err != nil {
 		return err
 	}
-	err = openWithDefaultViewer(filepath.Join(dirPath, pdfName))
-	if err != nil {
-		return err
+	if !option.NoPDF {
+		if err := openWithDefaultViewer(filepath.Join(dirPath, pdfName)); err != nil {
+			return err
+		}
 	}
 	if err := reg.SetProblemPath(problem.ID, sourcePath, dirPath); err != nil {
 		return err

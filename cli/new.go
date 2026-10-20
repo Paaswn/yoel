@@ -15,6 +15,7 @@ func newNewCommand() *cobra.Command {
 	var maxRow int
 	var jsonOutput bool
 	var force bool
+	var noPDF bool
 	command := &cobra.Command{
 		Use:   "new <query>",
 		Short: "Create a new problem",
@@ -23,7 +24,7 @@ func newNewCommand() *cobra.Command {
 			query := args[0]
 			resFunc := resultFunc{
 				single: func(ctx context.Context, session core.SavedSession, problem *core.ProblemLite, reg *core.Registry) error {
-					return cliCreateQuestion(cmd, core.CreateProblemArgs{Ctx: ctx, Session: session, Problem: problem, Reg: reg, Force: force})
+					return cliCreateQuestion(cmd, ctx, session, problem, reg, core.CreateProblemOption{Force: force, NoPDF: noPDF})
 
 				},
 				multiple: func(cmd *cobra.Command, session core.SavedSession, problems []core.ProblemLite, reg *core.Registry, singleFunc handleSingleProblem) error {
@@ -47,6 +48,7 @@ func newNewCommand() *cobra.Command {
 	command.Flags().IntVarP(&maxRow, "max-row", "m", 10, "maximum number of rows to display")
 	command.Flags().BoolVarP(&jsonOutput, "json", "j", false, "format output as json")
 	command.Flags().BoolVarP(&force, "force", "f", false, "format output as json")
+	command.Flags().BoolVar(&noPDF, "no-pdf", false, "save the PDF without opening its viewer")
 	return command
 }
 
@@ -57,25 +59,25 @@ type resultFunc struct {
 type handleMultipleProblems func(*cobra.Command, core.SavedSession, []core.ProblemLite, *core.Registry, handleSingleProblem) error
 type handleSingleProblem func(context.Context, core.SavedSession, *core.ProblemLite, *core.Registry) error
 
-func cliCreateQuestion(cmd *cobra.Command, args core.CreateProblemArgs) error {
-	err := core.CreateProblem(args)
+func cliCreateQuestion(cmd *cobra.Command, ctx context.Context, session core.SavedSession, problem *core.ProblemLite, reg *core.Registry, option core.CreateProblemOption) error {
+	err := core.CreateProblem(ctx, session, problem, reg, option)
 	if errors.Is(err, core.ProblemExistErr) {
 		if !isTTY(cmd) {
-			return fmt.Errorf("cannot create \"%s\", path already exists, and force is set to \"%v\" while the terminal isn't interactive.", args.Problem.CodeName, args.Force)
+			return fmt.Errorf("cannot create \"%s\", path already exists, and force is set to \"%v\" while the terminal isn't interactive.", problem.CodeName, option.Force)
 		}
 		confirm, promptErr := yesNoPrompt(cmd, "Problem path already exists. Create anyway?")
 		if promptErr != nil {
-			return err
+			return promptErr
 		}
 		if confirm {
-			args.Force = true
-			err = core.CreateProblem(args)
+			option.Force = true
+			err = core.CreateProblem(ctx, session, problem, reg, option)
 		}
 	}
 	if err != nil {
 		return err
 	}
-	_, err = lg.Fprintf(cmd.ErrOrStderr(), lg.NewStyle().Faint(true).Render("Problem successfully created at %s\n"), args.Problem.DirectoryPath)
+	_, err = lg.Fprintf(cmd.ErrOrStderr(), lg.NewStyle().Faint(true).Render("Problem successfully created at %s\n"), problem.DirectoryPath)
 	return err
 }
 func queryWithResFunc(cmd *cobra.Command, query string, resFunc resultFunc) error {

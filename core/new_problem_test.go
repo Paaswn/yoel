@@ -20,6 +20,7 @@ import (
 
 const problemTestPDF = "%PDF-1.7 test content"
 const problemTestToken = "fake-problem-token"
+
 func TestCreateProblemNoAttachment(t *testing.T) {
 	cwd := t.TempDir()
 	problem := ProblemLite{ID: 42, CodeName: "sample", HasAttachment: false}
@@ -31,7 +32,7 @@ func TestCreateProblemNoAttachment(t *testing.T) {
 		"pdf": {body: []byte(problemTestPDF)},
 	}, "pdf")
 
-	if err := createProblem(t.Context(), cwd, &problem, client, r, false); err != nil {
+	if err := createProblem(t.Context(), cwd, &problem, client, r, CreateProblemOption{}); err != nil {
 		t.Fatalf("createProblem() error = %v", err)
 	}
 
@@ -43,8 +44,44 @@ func TestCreateProblemNoAttachment(t *testing.T) {
 	assertProblemDirectoryEntries(t, cwd, problem.CodeName)
 }
 
+func TestCreateProblemNoPDF(t *testing.T) {
+	// Creation must succeed even when the viewer executable is unavailable.
+	t.Setenv("PATH", t.TempDir())
+	for _, force := range []bool{false, true} {
+		t.Run(fmt.Sprintf("force=%v", force), func(t *testing.T) {
+			cwd := t.TempDir()
+			problem := ProblemLite{ID: 42, CodeName: "sample"}
+			r := newRegistryForTest(t)
+			if err := r.Upsert(problem); err != nil {
+				t.Fatal(err)
+			}
+			problemDir := filepath.Join(cwd, problem.CodeName)
+			if force {
+				if err := os.Mkdir(problemDir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(problemDir, "old.txt"), []byte("old"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			client := newProblemFilesTestClient(t, problem.ID, map[string]problemFileResponse{
+				"pdf": {body: []byte(problemTestPDF)},
+			}, "pdf")
+			if err := createProblem(t.Context(), cwd, &problem, client, r, CreateProblemOption{Force: force, NoPDF: true}); err != nil {
+				t.Fatal(err)
+			}
+			assertFileContents(t, filepath.Join(problemDir, "42.pdf"), []byte(problemTestPDF), 0o444)
+			assertFileContents(t, filepath.Join(problemDir, "main.cpp"), []byte(yoelSourceFile), 0o755)
+			assertProblemRegistryPaths(t, r, problem.ID, filepath.Join(problemDir, "main.cpp"), problemDir)
+			if _, err := os.Stat(filepath.Join(problemDir, "old.txt")); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("old marker remains after creation: %v", err)
+			}
+		})
+	}
+}
+
 func TestCreateProblemWithAttachment(t *testing.T) {
-    yoelBanner = ""
+	yoelBanner = ""
 	cwd := t.TempDir()
 	problem := ProblemLite{ID: 42, CodeName: "sample", HasAttachment: true}
 	r := newRegistryForTest(t)
@@ -63,7 +100,7 @@ func TestCreateProblemWithAttachment(t *testing.T) {
 		"attachment": {body: makeProblemTestZIP(t, entries)},
 	}, "pdf", "attachment")
 
-	if err := createProblem(t.Context(), cwd, &problem, client, r, false); err != nil {
+	if err := createProblem(t.Context(), cwd, &problem, client, r, CreateProblemOption{}); err != nil {
 		t.Fatalf("createProblem() error = %v", err)
 	}
 	problemDir := filepath.Join(cwd, problem.CodeName)
@@ -107,7 +144,7 @@ func TestCreateProblemDoesNotReplaceExistingProblem(t *testing.T) {
 	client := newProblemFilesTestClient(t, problem.ID, map[string]problemFileResponse{
 		"pdf": {body: []byte(problemTestPDF)},
 	}, "pdf")
-	if err := createProblem(t.Context(), cwd, &problem, client, r, false); err == nil {
+	if err := createProblem(t.Context(), cwd, &problem, client, r, CreateProblemOption{}); err == nil {
 		t.Error("creation succeeded, want error when destination exists")
 	}
 	assertFileContents(t, marker, []byte("keep"), 0o644)
@@ -150,7 +187,7 @@ func TestCreateProblemDownloadFailures(t *testing.T) {
 			client := newProblemFilesTestClient(t, problem.ID, map[string]problemFileResponse{
 				"pdf": pdf, "attachment": tc.attachment,
 			}, tc.requests...)
-			err := createProblem(t.Context(), cwd, &problem, client, r, false)
+			err := createProblem(t.Context(), cwd, &problem, client, r, CreateProblemOption{})
 			if err == nil {
 				t.Error("creation succeeded, want download or extraction error")
 			} else {
@@ -183,7 +220,7 @@ func TestCreateProblemCanceledContext(t *testing.T) {
 	client := newProblemFilesTestClient(t, problem.ID, nil)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if err := createProblem(ctx, cwd, &problem, client, r, false); !errors.Is(err, context.Canceled) {
+	if err := createProblem(ctx, cwd, &problem, client, r, CreateProblemOption{}); !errors.Is(err, context.Canceled) {
 		t.Errorf("error = %v, want context.Canceled", err)
 	}
 	assertProblemDirectoryEntries(t, cwd)
@@ -201,7 +238,7 @@ func TestCreateProblemMissingWorkingDirectory(t *testing.T) {
 	client := newProblemFilesTestClient(t, problem.ID, map[string]problemFileResponse{
 		"pdf": {body: []byte(problemTestPDF)},
 	}, "pdf")
-	if err := createProblem(t.Context(), cwd, &problem, client, r, false); !errors.Is(err, os.ErrNotExist) {
+	if err := createProblem(t.Context(), cwd, &problem, client, r, CreateProblemOption{}); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("error = %v, want missing-directory error", err)
 	}
 	assertProblemDirectoryEntries(t, root)
@@ -226,7 +263,7 @@ func TestCreateProblemRegistryUpdateFailure(t *testing.T) {
 	client := newProblemFilesTestClient(t, problem.ID, map[string]problemFileResponse{
 		"pdf": {body: []byte(problemTestPDF)},
 	}, "pdf")
-	err = createProblem(t.Context(), cwd, &problem, client, r, false)
+	err = createProblem(t.Context(), cwd, &problem, client, r, CreateProblemOption{})
 	if err == nil || !strings.Contains(err.Error(), "test rejected path update") {
 		t.Errorf("error = %v, want rejected registry update", err)
 	}
