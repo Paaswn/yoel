@@ -73,8 +73,7 @@ func newUpdateCommand(deps updateDependencies) *cobra.Command {
 				return err
 			}
 			if !isTTY(command) {
-				_, err := fmt.Fprintln(command.OutOrStdout(), "Run `yoel update` in an interactive terminal to confirm the update.")
-				return err
+				return errors.New("yoel update requires interactive terminal")
 			}
 			if _, err := fmt.Fprintln(command.OutOrStdout()); err != nil {
 				return err
