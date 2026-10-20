@@ -10,7 +10,7 @@ import (
 )
 
 func yesNoPrompt(cmd *cobra.Command, title string) (bool, error) {
-	var confirm bool
+	var confirm bool = true
 	err := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().Title(title).Value(&confirm),
