@@ -77,7 +77,8 @@ func cliCreateQuestion(cmd *cobra.Command, ctx context.Context, session core.Sav
 	if err != nil {
 		return err
 	}
-	_, err = lg.Fprintf(cmd.ErrOrStderr(), lg.NewStyle().Faint(true).Render("Problem successfully created at %s\n"), problem.DirectoryPath)
+	notice := lg.NewStyle().Faint(true).Render(fmt.Sprintf("Problem successfully created at %s", problem.DirectoryPath))
+	_, err = lg.Fprintln(cmd.ErrOrStderr(), notice)
 	return err
 }
 func queryWithResFunc(cmd *cobra.Command, query string, resFunc resultFunc) error {

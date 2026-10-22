@@ -10,7 +10,6 @@ import (
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
-	lg "charm.land/lipgloss/v2"
 	"github.com/Paaswn/yoel/core"
 	"github.com/spf13/cobra"
 )
@@ -39,21 +38,7 @@ func newListCommand() *cobra.Command {
 				} else if !isTTY(cmd) || disableInteractive {
 					return problemPrint(cmd.OutOrStdout(), *problem)
 				} else {
-					err = core.CreateProblem(ctx, session, problem, reg, core.CreateProblemOption{Force: force, NoPDF: noPDF})
-					if errors.Is(err, core.ProblemExistErr) {
-						confirm, promptErr := yesNoPrompt(cmd, "Problem's path already exists. Overwrite?")
-						if promptErr != nil {
-							return promptErr
-						}
-						if confirm {
-							err = core.CreateProblem(ctx, session, problem, reg, core.CreateProblemOption{Force: true, NoPDF: noPDF})
-						}
-					}
-					if err != nil {
-						return err
-					}
-					_, err := lg.Fprintf(cmd.ErrOrStderr(), lg.NewStyle().Faint(true).Render("Problem successfully created at %s"), problem.DirectoryPath)
-					return err
+					return cliCreateQuestion(cmd, ctx, session, problem, reg, core.CreateProblemOption{Force: force, NoPDF: noPDF})
 				}
 			}
 			resFunc := resultFunc{
