@@ -81,7 +81,7 @@ func createProblem(ctx context.Context, cwd string, problem *ProblemLite, client
 	dirPath := filepath.Join(cwd, problem.CodeName)
 	sourcePath := filepath.Join(dirPath, source)
 
-	if _, statErr := os.Stat(dirPath); statErr == nil {
+	if _, statErr := os.Stat(dirPath); statErr == nil || problem.IsOnLocal {
 		if !option.Force {
 			return ProblemExistErr
 		}
