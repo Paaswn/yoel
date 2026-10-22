@@ -13,9 +13,7 @@ yoel is a cli client for [Chula's Computer Engineering Grader](https://grader.na
 ### Windows
 
 ```pwsh
-$script = Join-Path $env:TEMP 'yoel-install.ps1'
-Invoke-WebRequest https://raw.githubusercontent.com/Paaswn/yoel/master/scripts/install.ps1 -OutFile $script
-& $script
+irm https://raw.githubusercontent.com/Paaswn/yoel/master/scripts/install.ps1 | iex
 ```
 
 ### macOS & Linux

@@ -1,5 +1,5 @@
-[CmdletBinding()]
-param()
+# Keep installer variables, functions, and preferences local when run via irm | iex.
+& {
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -104,4 +104,5 @@ try {
     Write-Output 'Verify the installation with: yoel --help'
 } finally {
     if (Test-Path -LiteralPath $temporaryDirectory) { Remove-Item -LiteralPath $temporaryDirectory -Recurse -Force }
+}
 }
