@@ -30,18 +30,32 @@ Gatekeeper may show a warning; do not disable platform security protections.
 
 ## Usage
 
-```sh || pwsh
-    yoel new <query>
-    yoel submit <query>
-    # a query can be either name or id of a problem
-```
+### `yoel fetch`
+ yoel fetch updates local problem registry to match the grader's. fetching notice will be shown if yoel couldn't find any problem metadata from local registry
 
-> [!Note]
-> There will be a prompt to select a problem if multiple are matched
+![fetch](usages/fetch.gif)
+
+### `yoel list`
+yoel list shows every available grader's problems which can be seleceted interactively
+
+![list](usages/list.gif)
+
+### `yoel new <query>`
+create any problem locally, every attachments are downloaded and seamlessly extracted to your working directory 
+![new](usages/new.gif)
+
+### `yoel submit <query>`
+submit a problem to the grader. yoel automatically solves which source file to be sent, ( student.h > main.h > main.cpp > *.cpp  )
+![submit](usages/submit.gif)
+
+
+> [!NOTE]
+>
+> a query could be problem's id, or problem's name
 
 ## Updating
 
-Release builds can check and install the latest Yoel release with:
+Release builds can check and install the latest yoel release with:
 
 ```sh
 yoel update
