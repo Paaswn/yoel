@@ -5,6 +5,12 @@
   "version": "0.1.0",
   "publisher": "yoel",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Paaswn/yoel.git",
+    "directory": "vscode"
+  },
+  "bugs": { "url": "https://github.com/Paaswn/yoel/issues" },
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Other"],
   "main": "./out/extension.js",
@@ -48,13 +54,25 @@
   },
   "scripts": {
     "compile": "tsc -p .",
+    "package": "vsce package",
     "vscode:prepublish": "npm run compile",
     "test": "npm run compile && node --test test/*.test.js"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "1.85.0",
+    "@vscode/vsce": "3.7.1",
     "jsdom": "^26.1.0",
     "typescript": "^5.7.0"
+  },
+  "overrides": {
+    "@vscode/vsce": {
+      "@azure/identity": {
+        ".": "4.13.0",
+        "@azure/msal-node": {
+          "uuid": "11.1.1"
+        }
+      }
+    }
   }
 }

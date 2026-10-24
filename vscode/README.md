@@ -3,17 +3,87 @@
 A thin frontend for the Yoel CLI. No server, grader HTTP client, or direct database
 access is included.
 
-## Getting started
+## Install the VSIX (recommended for users)
 
-1. Build/install Yoel **from this revision or a later compatible release**.
-   Previously released binaries are not assumed compatible: the extension needs
-   working `new --json`, `submit --source`, and structured JSON errors.
-2. In a terminal, run `yoel login` and `yoel fetch`.
-3. In this directory run `npm ci` and `npm run compile`, then open this directory
-   in VS Code and press F5 to launch the Extension Development Host.
-4. In the development host, open a trusted local workspace for your problems.
-   Set `yoel.executablePath` in user settings if the binary is not on PATH.
-   Supply only an executable path, not a shell command or flags.
+You need **desktop VS Code 1.85+** and the separate **Yoel CLI v0.6.0-alpha.1**
+(or a later compatible build). No Node.js, Go, or F5 development host is needed to
+install the packaged extension.
+
+1. Download the CLI from the
+   [v0.6.0-alpha.1 release](https://github.com/Paaswn/yoel/releases/tag/v0.6.0-alpha.1).
+   Choose `windows`, `darwin` (macOS), or `linux`, and `amd64` (Intel/AMD x64) or
+   `arm64` (including Apple silicon). Verify the archive against the release's
+   `checksums.txt`, extract it, and put the executable on PATH or keep its absolute
+   path for the executable setting. Stable CLI releases before this feature may
+   not support the required JSON commands; the stable installer does not select
+   this prerelease.
+2. Get `yoel-0.1.0.vsix` from the repository's `vscode` directory or from the person
+   sharing the extension. In VS Code choose **Extensions → … → Install from VSIX…**
+   and select it. Alternatively, from the directory containing the download:
+
+   ```sh
+   code --install-extension yoel-0.1.0.vsix
+   ```
+
+3. If necessary, open VS Code's user settings, search **Yoel: Executable Path**,
+   and set the absolute CLI path. Supply only the executable path, not shell
+   arguments. For example, a Windows JSON setting could be:
+
+   ```json
+   { "yoel.executablePath": "C:\\Tools\\yoel\\yoel.exe" }
+   ```
+
+4. In a terminal, use that same executable to run:
+
+   ```sh
+   yoel --version
+   yoel login
+   yoel fetch
+   ```
+
+   If it is not on PATH, substitute its full path (in PowerShell, use
+   `& "C:\Tools\yoel\yoel.exe" login`, and likewise for the other commands).
+5. Open a trusted local workspace folder and click **Yoel** in the Activity Bar.
+   Use **New Problem…**, or expand a local problem to **Open Source** or **Submit**.
+
+The VSIX contains the compiled extension, not a bundled CLI. The same VSIX works
+on all three desktop platforms when paired with the correct CLI binary. With
+SSH/WSL/containers, install and authenticate Yoel where the extension host runs.
+This is a manually distributed MVP, not a Marketplace installation. Install a new
+VSIX to update it; CLI and extension versions are separate.
+
+## Development and packaging
+
+To develop from source, build the Go CLI from this revision, then run `npm ci` and
+`npm run compile` in `vscode`. Open that directory in VS Code and press F5. In the
+Extension Development Host, configure the development binary's absolute path and
+open a trusted workspace.
+
+To build the distributable, use **Node.js 22+** and npm, then run in `vscode`:
+
+```sh
+npm ci
+npm test
+npm run package
+```
+
+Packaging automatically recompiles via `vscode:prepublish` and produces
+`yoel-0.1.0.vsix` for the current manifest version. The local packaging tool is
+pinned in the lockfile; no global `vsce` installation or publishing credential is
+needed. Archives are excluded from their own contents, along with source, tests,
+development dependencies, and the lockfile. The small `yoel-*.vsix` packages are
+intentionally tracked here for sharing; build output and dependencies remain ignored.
+
+Packaging-only dependency overrides pin Azure Identity to `4.13.0` (within this
+`vsce` version's supported range) to avoid the affected MSAL authorization flow in
+newer Identity releases, and MSAL's `uuid` dependency to `11.1.1` to fix its bounds
+check advisory. MSAL uses the unchanged CommonJS `v4()` API. These dependencies
+are not included in the installed extension. Revisit the overrides when upstream
+dependencies are fixed.
+
+Before distributing an updated version, bump `package.json` and the lockfile,
+rebuild, and test installing the generated VSIX in a normal VS Code window.
+`npm run package` only packages locally; it does not publish anything.
 
 ## Sidebar dashboard
 
