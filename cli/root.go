@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/Paaswn/yoel/core"
@@ -50,6 +51,11 @@ func NewRootCommandWithVersion(version string) *cobra.Command {
 }
 
 func isTTY(cmd *cobra.Command) bool {
+	// Machine-readable commands must not prompt or render a terminal UI,
+	// even when invoked directly from an interactive terminal.
+	if jsonOutput, _ := cmd.Flags().GetBool("json"); jsonOutput {
+		return false
+	}
 	f, ok := cmd.InOrStdin().(*os.File)
 	fout, fok := cmd.OutOrStdout().(*os.File)
 	return ok && term.IsTerminal(f.Fd()) && fok && term.IsTerminal(fout.Fd())
@@ -60,6 +66,9 @@ func cliLoadSession(cmd *cobra.Command) (core.SavedSession, error) {
 	switch err {
 	case nil:
 	case core.SessionExpiredError:
+		if !isTTY(cmd) {
+			return core.SavedSession{}, fmt.Errorf("session expired; run 'yoel login' in a terminal: %w", err)
+		}
 		if err := runLoginForm(cmd); err != nil {
 			return core.SavedSession{}, err
 		}

@@ -144,13 +144,52 @@ func TestCreateProblemDoesNotReplaceExistingProblem(t *testing.T) {
 	client := newProblemFilesTestClient(t, problem.ID, map[string]problemFileResponse{
 		"pdf": {body: []byte(problemTestPDF)},
 	}, "pdf")
-	if err := createProblem(t.Context(), cwd, &problem, client, r, CreateProblemOption{}); err == nil {
-		t.Error("creation succeeded, want error when destination exists")
+	err := createProblem(t.Context(), cwd, &problem, client, r, CreateProblemOption{})
+	var exists *ProblemExistsError
+	if !errors.Is(err, ProblemExistErr) || !errors.As(err, &exists) {
+		t.Fatalf("expected typed existing-problem error, got %v", err)
+	}
+	if exists.DirectoryPath != destination {
+		t.Fatalf("reported destination = %q, want %q", exists.DirectoryPath, destination)
 	}
 	assertFileContents(t, marker, []byte("keep"), 0o644)
 	assertProblemDirectoryEntries(t, destination, "keep.txt")
 	assertProblemDirectoryEntries(t, cwd, problem.CodeName)
 	assertProblemRegistryPaths(t, r, problem.ID, previousSource, previousDir)
+}
+
+func TestRecreateRegisteredProblemWithMissingSource(t *testing.T) {
+	cwd := t.TempDir()
+	problem := ProblemLite{ID: 42, CodeName: "sample"}
+	r := newRegistryForTest(t)
+	if err := r.Upsert(problem); err != nil {
+		t.Fatal(err)
+	}
+	destination := filepath.Join(cwd, problem.CodeName)
+	source := filepath.Join(destination, "main.cpp")
+	if err := r.SetProblemPath(problem.ID, source, destination); err != nil {
+		t.Fatal(err)
+	}
+	problem, err := r.QueryByID(problem.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := newProblemFilesTestClient(t, problem.ID, map[string]problemFileResponse{
+		"pdf": {body: []byte(problemTestPDF)},
+	}, "pdf", "pdf")
+	err = createProblem(t.Context(), cwd, &problem, client, r, CreateProblemOption{NoPDF: true})
+	var exists *ProblemExistsError
+	if !errors.As(err, &exists) || exists.DirectoryPath != destination {
+		t.Fatalf("expected registered-path conflict with destination, got %v", err)
+	}
+	if err := createProblem(t.Context(), cwd, &problem, client, r, CreateProblemOption{Force: true, NoPDF: true}); err != nil {
+		t.Fatal(err)
+	}
+	assertFileContents(t, source, []byte(yoelSourceFile), 0o755)
+	assertProblemRegistryPaths(t, r, problem.ID, source, destination)
+	if !problem.IsOnLocal || problem.SourcePath != source {
+		t.Fatalf("incomplete recreated metadata: %+v", problem)
+	}
 }
 
 func TestCreateProblemDownloadFailures(t *testing.T) {

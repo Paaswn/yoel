@@ -38,6 +38,15 @@ func CreateProblem(ctx context.Context, session SavedSession, problem *ProblemLi
 
 var ProblemExistErr = errors.New("problem path already exists")
 
+// ProblemExistsError identifies the directory that forced creation would replace.
+// It may differ from the problem's previously registered directory.
+type ProblemExistsError struct {
+	DirectoryPath string
+}
+
+func (e *ProblemExistsError) Error() string { return ProblemExistErr.Error() }
+func (e *ProblemExistsError) Unwrap() error { return ProblemExistErr }
+
 func createProblem(ctx context.Context, cwd string, problem *ProblemLite, client *gapi.Client, reg *Registry, option CreateProblemOption) error {
 	c, cancel := context.WithTimeout(ctx, TimeOut)
 	defer cancel()
@@ -83,7 +92,7 @@ func createProblem(ctx context.Context, cwd string, problem *ProblemLite, client
 
 	if _, statErr := os.Stat(dirPath); statErr == nil || problem.IsOnLocal {
 		if !option.Force {
-			return ProblemExistErr
+			return &ProblemExistsError{DirectoryPath: dirPath}
 		}
 
 		if err := os.RemoveAll(dirPath); err != nil {
@@ -111,6 +120,7 @@ func createProblem(ctx context.Context, cwd string, problem *ProblemLite, client
 func setLocalProblemPath(problem *ProblemLite, sourcePath string, dirPath string) {
 	problem.DirectoryPath = dirPath
 	problem.SourcePath = sourcePath
+	problem.IsOnLocal = true
 }
 
 var yoelBanner = `/*

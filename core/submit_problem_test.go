@@ -50,6 +50,8 @@ func TestSubmitProblem(t *testing.T) {
 			switch tc.terminal {
 			case "done":
 				final.Points = &points
+				comment := "[P-]"
+				final.GraderComment = &comment
 				final.Evaluations = []gapi.Evaluation{{TestcaseID: 1, Result: &evaluation}, {TestcaseID: 2}}
 			case "compilation_error":
 				final.CompilerMessage = &compiler
@@ -114,6 +116,7 @@ func TestSubmitProblem(t *testing.T) {
 				t.Fatal(err)
 			}
 			r := newRegistryForTest(t)
+			seedRegistryProblem(t, r, ProblemLite{ID: 42, CodeName: "sample"})
 			got, err := submitProblem(ctx, client.WithToken("fake-token"), ProblemLite{ID: 42, SourcePath: path}, r)
 			if tc.wantErr != nil {
 				if !errors.Is(err, tc.wantErr) || got.ID != 0 {
@@ -132,6 +135,16 @@ func TestSubmitProblem(t *testing.T) {
 				case Done:
 					if got.Points == nil || *got.Points != points {
 						t.Error("lost final score")
+					}
+					cached, err := r.QueryByID(42)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if cached.BestScore != points || cached.BestEvaluation == nil || *cached.BestEvaluation != "[P-]" {
+						t.Fatalf("submission did not persist best score/evaluation: %+v", cached)
+					}
+					if cached.BestSubmittedAt == nil || *cached.BestSubmittedAt != final.SubmittedAt.Format(time.RFC3339Nano) {
+						t.Fatalf("submission did not persist grader timestamp: %+v", cached)
 					}
 					var want []gapi.Testcase
 					if tc.failure != "metadata" {

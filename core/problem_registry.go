@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	gapi "github.com/Paaswn/yoel/graderapi"
 	"github.com/adrg/xdg"
@@ -27,26 +29,26 @@ const (
 )
 
 func yoelNormalDBPath() (string, error) {
-    
-	dbPath, err := xdg.DataFile(filepath.Join( Yoel, YoelDatabase ))
+
+	dbPath, err := xdg.DataFile(filepath.Join(Yoel, YoelDatabase))
 	if err != nil {
 		return "", err
 	}
 	cfgdir, err := os.UserConfigDir()
-    if err != nil {
-        return "", err
-    } else {
-        oldPath := filepath.Join(cfgdir, Yoel, YoelDatabase)
-        
-        if _, err := os.Stat(oldPath); err == nil {
-            if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-                if err := os.Rename(oldPath, dbPath); err != nil {
-                    return "", err
-                }
-            }
-        }
-        return dbPath, nil
-    }
+	if err != nil {
+		return "", err
+	} else {
+		oldPath := filepath.Join(cfgdir, Yoel, YoelDatabase)
+
+		if _, err := os.Stat(oldPath); err == nil {
+			if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+				if err := os.Rename(oldPath, dbPath); err != nil {
+					return "", err
+				}
+			}
+		}
+		return dbPath, nil
+	}
 }
 func NewRegistryWithPath(dbPath string) (*Registry, error) {
 	db, err := sql.Open("sqlite", dbPath)
@@ -79,26 +81,30 @@ func NewRegistry() (*Registry, error) {
 }
 
 type problemLite struct {
-	id             int
-	has_attachment bool
-	sort_order     int
-	best_score     sql.NullFloat64
-	code_name      string
-	pretty_name    string
-	source_path    sql.NullString // source path indicates file that will be sent to grader such as student.h or main.cpp
-	directory_path sql.NullString
+	id                int
+	has_attachment    bool
+	sort_order        int
+	best_score        sql.NullFloat64
+	best_evaluation   *string
+	best_submitted_at *string
+	code_name         string
+	pretty_name       string
+	source_path       sql.NullString // source path indicates file that will be sent to grader such as student.h or main.cpp
+	directory_path    sql.NullString
 }
 
 type ProblemLite struct {
-	ID            int     `json:"id"`
-	HasAttachment bool    `json:"has_attachment"`
-	SortOrder     int     `json:"sort_order"`
-	BestScore     float64 `json:"best_score"`
-	CodeName      string  `json:"code_name"`
-	PrettyName    string  `json:"pretty_name"`
-	SourcePath    string  `json:"source_path"` // source path indicates file that will be sent to grader such as student.h or main.cpp
-	DirectoryPath string  `json:"directory_path"`
-	IsOnLocal     bool    `json:"is_on_local"`
+	ID              int     `json:"id"`
+	HasAttachment   bool    `json:"has_attachment"`
+	SortOrder       int     `json:"sort_order"`
+	BestScore       float64 `json:"best_score"`
+	BestEvaluation  *string `json:"best_evaluation,omitempty"`
+	BestSubmittedAt *string `json:"best_submitted_at,omitempty"` // RFC3339 timestamp from the grader.
+	CodeName        string  `json:"code_name"`
+	PrettyName      string  `json:"pretty_name"`
+	SourcePath      string  `json:"source_path"` // source path indicates file that will be sent to grader such as student.h or main.cpp
+	DirectoryPath   string  `json:"directory_path"`
+	IsOnLocal       bool    `json:"is_on_local"`
 }
 
 func (r *Registry) init() error {
@@ -112,8 +118,35 @@ func (r *Registry) init() error {
         pretty_name TEXT NOT NULL,
         source_path TEXT,
         directory_path TEXT
-        )
+        );
+        CREATE TABLE IF NOT EXISTS problem_evaluations (
+            problem_id INTEGER PRIMARY KEY,
+            score REAL NOT NULL,
+            evaluation TEXT NOT NULL,
+            submitted_at TEXT
+        );
     `)
+	if err != nil {
+		return err
+	}
+	// Upgrade registries created before best-submission timestamps were stored.
+	hasColumn := func() (bool, error) {
+		var count int
+		err := r.db.QueryRow(`SELECT count(*) FROM pragma_table_info('problem_evaluations')
+			WHERE name = 'submitted_at'`).Scan(&count)
+		return count > 0, err
+	}
+	exists, err := hasColumn()
+	if err != nil || exists {
+		return err
+	}
+	_, err = r.db.Exec(`ALTER TABLE problem_evaluations ADD COLUMN submitted_at TEXT`)
+	if err != nil {
+		// Another CLI process may have completed the same migration.
+		if exists, checkErr := hasColumn(); checkErr == nil && exists {
+			return nil
+		}
+	}
 	return err
 }
 
@@ -164,14 +197,60 @@ func (r *Registry) UpdateProblemScore(id int, score float64) error {
 	return err
 }
 
+// RecordProblemResult atomically records a completed result only if it meets or
+// exceeds the current registry best, not the caller's possibly stale snapshot.
+// Evaluations are paired with their score so a later fetch cannot mislabel them.
+func (r *Registry) RecordProblemResult(id int, score float64, evaluation *string, submittedAt time.Time) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(`UPDATE problems SET best_score = ?
+		WHERE id = ? AND (best_score IS NULL OR best_score <= ?)`, score, id, score)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		comment := ""
+		if evaluation != nil && strings.TrimSpace(*evaluation) != "" {
+			comment = *evaluation
+		}
+		var timestamp any
+		if !submittedAt.IsZero() {
+			timestamp = submittedAt.UTC().Format(time.RFC3339Nano)
+		}
+		// Keep evaluation and timestamp from one chosen best submission. On a
+		// tie, prefer a result with an evaluation over one without it.
+		_, err = tx.Exec(`INSERT INTO problem_evaluations (problem_id, score, evaluation, submitted_at)
+			VALUES (?, ?, ?, ?) ON CONFLICT(problem_id) DO UPDATE SET
+			score = excluded.score, evaluation = excluded.evaluation, submitted_at = excluded.submitted_at
+			WHERE problem_evaluations.score != excluded.score
+				OR excluded.evaluation != '' OR problem_evaluations.evaluation = ''`,
+			id, score, comment, timestamp)
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // since id is unique this method give you exactly one row, hence I use QueryRow here
 func (r *Registry) QueryByID(id int) (ProblemLite, error) {
 	var p problemLite
 	err := r.db.QueryRow(`
-        SELECT id, has_attachment, best_score, code_name, pretty_name, source_path, directory_path
+        SELECT id, has_attachment, best_score, code_name, pretty_name, source_path, directory_path,
+            (SELECT NULLIF(evaluation, '') FROM problem_evaluations
+             WHERE problem_id = problems.id AND score = problems.best_score),
+            (SELECT submitted_at FROM problem_evaluations
+             WHERE problem_id = problems.id AND score = problems.best_score)
         FROM problems
         WHERE id = ?
-    `, id).Scan(&p.id, &p.has_attachment, &p.best_score, &p.code_name, &p.pretty_name, &p.source_path, &p.directory_path)
+    `, id).Scan(&p.id, &p.has_attachment, &p.best_score, &p.code_name, &p.pretty_name, &p.source_path, &p.directory_path, &p.best_evaluation, &p.best_submitted_at)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ProblemLite{}, ErrProblemNotFound
@@ -179,14 +258,16 @@ func (r *Registry) QueryByID(id int) (ProblemLite, error) {
 		return ProblemLite{}, err
 	}
 	return ProblemLite{
-		ID:            p.id,
-		HasAttachment: p.has_attachment,
-		BestScore:     p.best_score.Float64,
-		CodeName:      p.code_name,
-		PrettyName:    p.pretty_name,
-		SourcePath:    p.source_path.String,
-		DirectoryPath: p.directory_path.String,
-		IsOnLocal:     p.directory_path.Valid,
+		ID:              p.id,
+		HasAttachment:   p.has_attachment,
+		BestScore:       p.best_score.Float64,
+		BestEvaluation:  p.best_evaluation,
+		BestSubmittedAt: p.best_submitted_at,
+		CodeName:        p.code_name,
+		PrettyName:      p.pretty_name,
+		SourcePath:      p.source_path.String,
+		DirectoryPath:   p.directory_path.String,
+		IsOnLocal:       p.directory_path.Valid,
 	}, nil
 }
 
@@ -199,7 +280,11 @@ func (r *Registry) QueryByName(name string) ([]ProblemLite, error) {
                 code_name,
                 pretty_name,
                 source_path,
-                directory_path
+                directory_path,
+                (SELECT NULLIF(evaluation, '') FROM problem_evaluations
+                 WHERE problem_id = problems.id AND score = problems.best_score),
+                (SELECT submitted_at FROM problem_evaluations
+                 WHERE problem_id = problems.id AND score = problems.best_score)
         FROM problems
         WHERE code_name LIKE ?
             OR pretty_name LIKE ?
@@ -220,19 +305,23 @@ func (r *Registry) QueryByName(name string) ([]ProblemLite, error) {
 			&p.pretty_name,
 			&p.source_path,
 			&p.directory_path,
+			&p.best_evaluation,
+			&p.best_submitted_at,
 		); err != nil {
 			return nil, err
 		}
 
 		result = append(result, ProblemLite{
-			ID:            p.id,
-			HasAttachment: p.has_attachment,
-			BestScore:     p.best_score.Float64,
-			CodeName:      p.code_name,
-			PrettyName:    p.pretty_name,
-			SourcePath:    p.source_path.String,
-			DirectoryPath: p.directory_path.String,
-			IsOnLocal:     p.directory_path.Valid,
+			ID:              p.id,
+			HasAttachment:   p.has_attachment,
+			BestScore:       p.best_score.Float64,
+			BestEvaluation:  p.best_evaluation,
+			BestSubmittedAt: p.best_submitted_at,
+			CodeName:        p.code_name,
+			PrettyName:      p.pretty_name,
+			SourcePath:      p.source_path.String,
+			DirectoryPath:   p.directory_path.String,
+			IsOnLocal:       p.directory_path.Valid,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -291,7 +380,11 @@ func (r *Registry) GetAllProblems() ([]ProblemLite, error) {
                 code_name,
                 pretty_name,
                 source_path,
-                directory_path
+                directory_path,
+                (SELECT NULLIF(evaluation, '') FROM problem_evaluations
+                 WHERE problem_id = problems.id AND score = problems.best_score),
+                (SELECT submitted_at FROM problem_evaluations
+                 WHERE problem_id = problems.id AND score = problems.best_score)
             FROM problems
             ORDER BY sort_order ASC;
         `)
@@ -313,18 +406,22 @@ func (r *Registry) GetAllProblems() ([]ProblemLite, error) {
 			&p.pretty_name,
 			&p.source_path,
 			&p.directory_path,
+			&p.best_evaluation,
+			&p.best_submitted_at,
 		); err != nil {
 			return nil, err
 		}
 
 		problems = append(problems, ProblemLite{
-			ID:            p.id,
-			BestScore:     p.best_score.Float64,
-			CodeName:      p.code_name,
-			PrettyName:    p.pretty_name,
-			SourcePath:    p.source_path.String,
-			DirectoryPath: p.directory_path.String,
-			IsOnLocal:     p.directory_path.Valid,
+			ID:              p.id,
+			BestScore:       p.best_score.Float64,
+			BestEvaluation:  p.best_evaluation,
+			BestSubmittedAt: p.best_submitted_at,
+			CodeName:        p.code_name,
+			PrettyName:      p.pretty_name,
+			SourcePath:      p.source_path.String,
+			DirectoryPath:   p.directory_path.String,
+			IsOnLocal:       p.directory_path.Valid,
 		})
 	}
 	if err := rows.Err(); err != nil {

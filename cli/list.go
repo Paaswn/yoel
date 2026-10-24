@@ -24,6 +24,18 @@ func newListCommand() *cobra.Command {
 		Use:   "list",
 		Short: "Show list of problems from grader",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if jsonOutput {
+				reg, err := core.NewRegistry()
+				if err != nil {
+					return err
+				}
+				defer reg.Close()
+				problems, err := reg.GetAllProblems()
+				if err != nil {
+					return err
+				}
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(problems)
+			}
 			single := func(ctx context.Context, session core.SavedSession, problem *core.ProblemLite, reg *core.Registry) error {
 				jsonOutput, err := cmd.Flags().GetBool("json")
 				if err != nil {

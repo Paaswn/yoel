@@ -17,6 +17,7 @@ import (
 func newSubmitCommand() *cobra.Command {
 	var maxRow int
 	var jsonOutput bool
+	var source bool
 	command := &cobra.Command{
 		Use:   "submit",
 		Short: "Submit source file to grader",
@@ -81,11 +82,28 @@ func newSubmitCommand() *cobra.Command {
 					}
 				},
 			}
+			if source {
+				reg, err := core.NewRegistry()
+				if err != nil {
+					return err
+				}
+				defer reg.Close()
+				problem, err := reg.QueryBySourcePath(query)
+				if err != nil {
+					return err
+				}
+				session, err := cliLoadSession(cmd)
+				if err != nil {
+					return err
+				}
+				return single(cmd.Context(), session, &problem, reg)
+			}
 			return queryWithResFunc(cmd, query, resFunc)
 		},
 	}
 	command.Flags().IntVarP(&maxRow, "max-row", "m", 10, "maximum number of rows to display")
 	command.Flags().BoolVarP(&jsonOutput, "json", "j", false, "format output as json")
+	command.Flags().BoolVar(&source, "source", false, "identify the problem by its registered source file path")
 	return command
 }
 

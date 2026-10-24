@@ -1,0 +1,60 @@
+{
+  "name": "yoel",
+  "displayName": "Yoel",
+  "description": "Create, open, and submit Cafe Grader problems using the Yoel CLI.",
+  "version": "0.1.0",
+  "publisher": "yoel",
+  "license": "MIT",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "main": "./out/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": { "supported": false },
+    "virtualWorkspaces": { "supported": false }
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "yoel", "title": "Yoel", "icon": "resources/yoel.svg" }
+      ]
+    },
+    "views": {
+      "yoel": [
+        { "id": "yoel.problems", "name": "Local Problems", "type": "webview" }
+      ]
+    },
+    "commands": [
+      { "command": "yoel.new", "title": "Yoel: New Problem" },
+      { "command": "yoel.open", "title": "Yoel: Open Problem", "icon": "$(go-to-file)" },
+      { "command": "yoel.submit", "title": "Yoel: Submit Problem" },
+      { "command": "yoel.refresh", "title": "Yoel: Refresh Problems", "icon": "$(refresh)" }
+    ],
+    "menus": {
+      "view/title": [
+        { "command": "yoel.refresh", "when": "view == yoel.problems", "group": "navigation" }
+      ]
+    },
+    "configuration": {
+      "title": "Yoel",
+      "properties": {
+        "yoel.executablePath": {
+          "type": "string",
+          "default": "yoel",
+          "scope": "machine",
+          "description": "Yoel executable on PATH or an absolute executable path (no shell arguments)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "vscode:prepublish": "npm run compile",
+    "test": "npm run compile && node --test test/*.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.7.0"
+  }
+}

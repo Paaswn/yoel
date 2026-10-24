@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -63,7 +64,7 @@ func cliCreateQuestion(cmd *cobra.Command, ctx context.Context, session core.Sav
 	err := core.CreateProblem(ctx, session, problem, reg, option)
 	if errors.Is(err, core.ProblemExistErr) {
 		if !isTTY(cmd) {
-			return fmt.Errorf("cannot create \"%s\", path already exists, and force is set to \"%v\" while the terminal isn't interactive.", problem.CodeName, option.Force)
+			return fmt.Errorf("cannot create %q: %w; existing files were not overwritten", problem.CodeName, err)
 		}
 		confirm, promptErr := yesNoPrompt(cmd, "Problem path already exists. Create anyway?")
 		if promptErr != nil {
@@ -76,6 +77,9 @@ func cliCreateQuestion(cmd *cobra.Command, ctx context.Context, session core.Sav
 	}
 	if err != nil {
 		return err
+	}
+	if jsonOutput, _ := cmd.Flags().GetBool("json"); jsonOutput {
+		return json.NewEncoder(cmd.OutOrStdout()).Encode(problem)
 	}
 	notice := lg.NewStyle().Faint(true).Render(fmt.Sprintf("Problem successfully created at %s", problem.DirectoryPath))
 	_, err = lg.Fprintln(cmd.ErrOrStderr(), notice)

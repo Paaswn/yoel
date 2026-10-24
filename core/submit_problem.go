@@ -73,8 +73,10 @@ func submitProblem(ctx context.Context, client *gapi.Client, problem ProblemLite
 	}
 }
 func setBestScore(reg *Registry, problem *ProblemLite, submission *SubmissionResult) {
-	if *submission.Points > problem.BestScore {
-		reg.UpdateProblemScore(problem.ID, *submission.Points)
+	if submission.Points != nil {
+		// Keep returning the grader result even if the optional local cache
+		// cannot be updated, as with the previous best-score-only cache.
+		_ = reg.RecordProblemResult(problem.ID, *submission.Points, submission.GraderComment, submission.SubmittedAt)
 	}
 }
 

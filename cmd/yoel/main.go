@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
 
@@ -19,8 +18,9 @@ func main() {
 		os.Interrupt,
 	)
 	defer stop()
-	if err := cli.NewRootCommandWithVersion(version).ExecuteContext(ctx); err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
+	cmd, err := cli.NewRootCommandWithVersion(version).ExecuteContextC(ctx)
+	if err != nil {
+		_ = cli.WriteCommandError(os.Stderr, cmd, err)
 		os.Exit(1)
 	}
 }
