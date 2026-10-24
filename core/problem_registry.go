@@ -27,26 +27,26 @@ const (
 )
 
 func yoelNormalDBPath() (string, error) {
-    
-	dbPath, err := xdg.DataFile(filepath.Join( Yoel, YoelDatabase ))
+
+	dbPath, err := xdg.DataFile(filepath.Join(Yoel, YoelDatabase))
 	if err != nil {
 		return "", err
 	}
 	cfgdir, err := os.UserConfigDir()
-    if err != nil {
-        return "", err
-    } else {
-        oldPath := filepath.Join(cfgdir, Yoel, YoelDatabase)
-        
-        if _, err := os.Stat(oldPath); err == nil {
-            if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-                if err := os.Rename(oldPath, dbPath); err != nil {
-                    return "", err
-                }
-            }
-        }
-        return dbPath, nil
-    }
+	if err != nil {
+		return "", err
+	} else {
+		oldPath := filepath.Join(cfgdir, Yoel, YoelDatabase)
+
+		if _, err := os.Stat(oldPath); err == nil {
+			if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+				if err := os.Rename(oldPath, dbPath); err != nil {
+					return "", err
+				}
+			}
+		}
+		return dbPath, nil
+	}
 }
 func NewRegistryWithPath(dbPath string) (*Registry, error) {
 	db, err := sql.Open("sqlite", dbPath)
@@ -168,10 +168,10 @@ func (r *Registry) UpdateProblemScore(id int, score float64) error {
 func (r *Registry) QueryByID(id int) (ProblemLite, error) {
 	var p problemLite
 	err := r.db.QueryRow(`
-        SELECT id, has_attachment, best_score, code_name, pretty_name, source_path, directory_path
+        SELECT *
         FROM problems
         WHERE id = ?
-    `, id).Scan(&p.id, &p.has_attachment, &p.best_score, &p.code_name, &p.pretty_name, &p.source_path, &p.directory_path)
+    `, id).Scan(&p.id, &p.has_attachment, &p.sort_order, &p.best_score, &p.code_name, &p.pretty_name, &p.source_path, &p.directory_path)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ProblemLite{}, ErrProblemNotFound
@@ -181,6 +181,7 @@ func (r *Registry) QueryByID(id int) (ProblemLite, error) {
 	return ProblemLite{
 		ID:            p.id,
 		HasAttachment: p.has_attachment,
+		SortOrder:     p.sort_order,
 		BestScore:     p.best_score.Float64,
 		CodeName:      p.code_name,
 		PrettyName:    p.pretty_name,
@@ -193,13 +194,7 @@ func (r *Registry) QueryByID(id int) (ProblemLite, error) {
 func (r *Registry) QueryByName(name string) ([]ProblemLite, error) {
 	query := "%" + name + "%"
 	rows, err := r.db.Query(`
-        SELECT  id,
-                has_attachment,
-                best_score,
-                code_name,
-                pretty_name,
-                source_path,
-                directory_path
+        SELECT *
         FROM problems
         WHERE code_name LIKE ?
             OR pretty_name LIKE ?
@@ -215,6 +210,7 @@ func (r *Registry) QueryByName(name string) ([]ProblemLite, error) {
 		if err := rows.Scan(
 			&p.id,
 			&p.has_attachment,
+			&p.sort_order,
 			&p.best_score,
 			&p.code_name,
 			&p.pretty_name,
@@ -227,6 +223,7 @@ func (r *Registry) QueryByName(name string) ([]ProblemLite, error) {
 		result = append(result, ProblemLite{
 			ID:            p.id,
 			HasAttachment: p.has_attachment,
+			SortOrder:     p.sort_order,
 			BestScore:     p.best_score.Float64,
 			CodeName:      p.code_name,
 			PrettyName:    p.pretty_name,
@@ -284,14 +281,7 @@ func (r *Registry) UpdateAllProblems(ctx context.Context, session SavedSession) 
 func (r *Registry) GetAllProblems() ([]ProblemLite, error) {
 
 	rows, err := r.db.Query(`
-            SELECT
-                id,
-                has_attachment,
-                best_score,
-                code_name,
-                pretty_name,
-                source_path,
-                directory_path
+            SELECT *
             FROM problems
             ORDER BY sort_order ASC;
         `)
@@ -308,6 +298,7 @@ func (r *Registry) GetAllProblems() ([]ProblemLite, error) {
 		if err := rows.Scan(
 			&p.id,
 			&p.has_attachment,
+			&p.sort_order,
 			&p.best_score,
 			&p.code_name,
 			&p.pretty_name,
@@ -320,6 +311,7 @@ func (r *Registry) GetAllProblems() ([]ProblemLite, error) {
 		problems = append(problems, ProblemLite{
 			ID:            p.id,
 			BestScore:     p.best_score.Float64,
+			SortOrder:     p.sort_order,
 			CodeName:      p.code_name,
 			PrettyName:    p.pretty_name,
 			SourcePath:    p.source_path.String,
