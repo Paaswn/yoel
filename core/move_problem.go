@@ -14,7 +14,7 @@ type MoveOption struct {
     Path string
 }
 
-var ProblemNotExistLocally = errors.New("this problem doesn't exist locally")
+var ProblemNotExistLocally = errors.New("the problem doesn't exist locally")
 func MoveProblem(ctx context.Context, problem *ProblemLite, reg *Registry, options MoveOption) error {
     if (!problem.IsOnLocal) {
         return ProblemNotExistLocally

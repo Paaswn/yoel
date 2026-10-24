@@ -40,7 +40,7 @@ func newMoveCommand() *cobra.Command {
 						for _, problem := range problems {
 							err := singleFunc(cmd.Context(), ss, &problem, r)
 							if err != nil {
-							    fmt.Fprintln(cmd.ErrOrStderr(), err)
+							    fmt.Fprintln(cmd.ErrOrStderr(),  fmt.Errorf("error moving %s; %w", problem.CodeName, err))
 							}
 						}
 					} else if len(problems) == 1 {
