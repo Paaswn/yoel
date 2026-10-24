@@ -22,18 +22,26 @@ const yoelHiddenDir string = ".yoel"
 type CreateProblemOption struct {
 	Force bool
 	NoPDF bool // Save the PDF without opening its viewer.
+	Path string
+	Client *gapi.Client
 }
 
 func CreateProblem(ctx context.Context, session SavedSession, problem *ProblemLite, reg *Registry, option CreateProblemOption) error {
-	client, err := gapi.NewClient(DefaultGraderURL, nil)
+    var client *gapi.Client
+    var err error
+    if option.Client == nil {
+        client, err = gapi.NewClient(DefaultGraderURL, nil)
+    	if err != nil {
+    		return err
+    	}
+    } else {
+        client = option.Client
+    }
+    path, err := filepath.Abs(filepath.Clean(option.Path))
 	if err != nil {
-		return err
+       	return err
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	return createProblem(ctx, cwd, problem, client.WithToken(session.Token), reg, option)
+	return createProblem(ctx, path, problem, client.WithToken(session.Token), reg, option)
 }
 
 var ProblemExistErr = errors.New("problem path already exists")
