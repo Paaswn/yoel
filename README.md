@@ -1,35 +1,3 @@
-# yoel
-
-yoel is a Go CLI/TUI client for [Chula's Computer Engineering Grader](https://grader.nattee.net/), with an experimental VS Code extension powered by the same CLI. It is one of my learning projects alongside [Falling sand simulation](https://github.com/Paaswn/sandfall-sim).
-
-> [!IMPORTANT]
->
-> ### LLM USAGE (v0.4.x and beyond)
->
-> Parts of Yoel, including tests, the grader API package, and the VS Code frontend,
-> were developed with LLM assistance. Commits with material Codex contributions
-> include a `Co-authored-by: Codex` trailer.
-
-## Installation
-
-### Windows
-
-```pwsh
-irm https://raw.githubusercontent.com/Paaswn/yoel/master/scripts/install.ps1 | iex
-```
-
-### macOS & Linux
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/Paaswn/yoel/master/scripts/install.sh | sh
-```
-
-Downloads are checked against the release SHA-256 checksums. If installation
-does not work, download the matching archive manually from the
-[Yoel Releases page](https://github.com/Paaswn/yoel/releases). Releases are not
-currently code-signed or macOS-notarized, so Windows SmartScreen or macOS
-Gatekeeper may show a warning; do not disable platform security protections.
-
 ## v0.6.0 preview CLI (separate from stable)
 
 These standalone installers default to **v0.6.0-alpha.1**, verify the release
