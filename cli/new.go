@@ -18,7 +18,7 @@ func newNewCommand() *cobra.Command {
 	var force bool
 	var noPDF bool
 	command := &cobra.Command{
-		Use:   "new <query>",
+		Use:   "new <query> [<path>]",
 		Short: "Create a new problem",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
