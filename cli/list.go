@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
@@ -23,6 +25,7 @@ func newListCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "list",
 		Short: "Show list of problems from grader",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			single := func(ctx context.Context, session core.SavedSession, problem *core.ProblemLite, reg *core.Registry) error {
 				jsonOutput, err := cmd.Flags().GetBool("json")
@@ -38,7 +41,18 @@ func newListCommand() *cobra.Command {
 				} else if !isTTY(cmd) || disableInteractive {
 					return problemPrint(cmd.OutOrStdout(), *problem)
 				} else {
-					return cliCreateQuestion(cmd, ctx, session, problem, reg, core.CreateProblemOption{Force: force, NoPDF: noPDF})
+					path, err := os.Getwd()
+					if err != nil {
+						return err
+					}
+					if len(args) > 0 {
+						path, err = filepath.Abs(filepath.Clean(args[0]))
+						if err != nil {
+							return err
+						}
+
+					}
+					return cliCreateQuestion(cmd, ctx, session, problem, reg, core.CreateProblemOption{Force: force, NoPDF: noPDF, Path: path})
 				}
 			}
 			resFunc := resultFunc{

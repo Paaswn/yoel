@@ -53,10 +53,6 @@ func seedRegistryProblem(t *testing.T, r *Registry, p ProblemLite) {
 
 func assertRegistryProblems(t *testing.T, got, want []ProblemLite) {
 	t.Helper()
-	// SortOrder is deliberately omitted from returned records.
-	for i := range want {
-		want[i].SortOrder = 0
-	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("problems = %#v, want %#v", got, want)
 	}
@@ -426,7 +422,7 @@ func TestRegistryUpdateAllProblems(t *testing.T) {
 	}
 	t.Run("scores ordering repeated refresh and preserved paths", func(t *testing.T) {
 		r := newRegistryForTest(t)
-		local := ProblemLite{ID: 42, SortOrder: 4, BestScore: 10, CodeName: "old", PrettyName: "Old",
+		local := ProblemLite{ID: 42, SortOrder: 1, BestScore: 10, CodeName: "old", PrettyName: "Old",
 			SourcePath: "main.cpp", DirectoryPath: "arrays", IsOnLocal: true}
 		seedRegistryProblem(t, r, local)
 		body := `[{"id":43,"name":"graphs","full_name":"Graph Problem","best_score":null},{"id":42,"name":"arrays","full_name":"Array Problem","best_score":87.5}]`
@@ -449,6 +445,9 @@ func TestRegistryUpdateAllProblems(t *testing.T) {
 			t.Fatal(err)
 		}
 		local.BestScore = 100
+		// yoel now omit sort order too !
+		local.SortOrder = 0
+		remote.SortOrder = 1
 		got, err = r.GetAllProblems()
 		if err != nil {
 			t.Fatal(err)

@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -17,24 +18,49 @@ import (
 func newSubmitCommand() *cobra.Command {
 	var maxRow int
 	var jsonOutput bool
+	var with string
+	var dontSetFlag bool
 	command := &cobra.Command{
 		Use:   "submit",
 		Short: "Submit source file to grader",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			query := args[0]
+			withCalled := cmd.Flags().Changed("with")
+			dontSet, err := cmd.Flags().GetBool("dont-set")
+			if err != nil {
+				return err
+			}
+			if dontSet && !withCalled {
+				return errors.New("dont-set requires --with")
+			}
 			single := func(ctx context.Context, session core.SavedSession, problem *core.ProblemLite, registry *core.Registry) error {
 				var submission core.SubmissionResult
 				jsonOutput, err := cmd.Flags().GetBool("json")
 				if err != nil {
 					return err
 				}
-				if isTTY(cmd) {
-					relative, err := filepath.Rel(problem.DirectoryPath, problem.SourcePath)
+				if withCalled {
+					rawpath, err := cmd.Flags().GetString("with")
 					if err != nil {
 						return err
 					}
-					_, err = lg.Fprintf(cmd.ErrOrStderr(), lg.NewStyle().Faint(true).Render("Submitting %s with file %s...\n"), problem.CodeName, relative)
+					problem.SourcePath, err = filepath.Abs(filepath.Clean(rawpath))
+					if err != nil {
+						return err
+					}
+				}
+				if isTTY(cmd) {
+					var submitFile string
+					if withCalled {
+						submitFile = problem.SourcePath
+					} else {
+						submitFile, err = filepath.Rel(problem.DirectoryPath, problem.SourcePath)
+						if err != nil {
+							return err
+						}
+					}
+					_, err = lg.Fprintf(cmd.ErrOrStderr(), lg.NewStyle().Faint(true).Render("Submitting %s with file %s...\n"), problem.CodeName, submitFile)
 					if err != nil {
 						return err
 					}
@@ -54,15 +80,22 @@ func newSubmitCommand() *cobra.Command {
 					}
 				}
 				if jsonOutput {
-					return json.NewEncoder(cmd.OutOrStdout()).Encode(submission)
+					if err := json.NewEncoder(cmd.OutOrStdout()).Encode(submission); err != nil {
+						return err
+					}
 				} else {
 					fm, err := formatSubmission(&submission)
 					if err != nil {
 						return err
 					}
-					_, err = lg.Fprintln(cmd.OutOrStdout(), fm)
-					return err
+					if _, err = lg.Fprintln(cmd.OutOrStdout(), fm); err != nil {
+						return err
+					}
 				}
+				if withCalled && !dontSet {
+					return registry.SetProblemPath(problem.ID, problem.SourcePath, problem.DirectoryPath)
+				}
+				return nil
 			}
 			resFunc := resultFunc{
 				single: single,
@@ -86,6 +119,9 @@ func newSubmitCommand() *cobra.Command {
 	}
 	command.Flags().IntVarP(&maxRow, "max-row", "m", 10, "maximum number of rows to display")
 	command.Flags().BoolVarP(&jsonOutput, "json", "j", false, "format output as json")
+	command.Flags().StringVarP(&with, "with", "w", "", "submit the problem with file")
+	command.Flags().BoolVar(&dontSetFlag, "dont-set", false, "don't set the source path provided by with flag")
+
 	return command
 }
 

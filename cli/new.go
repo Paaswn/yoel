@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 
 	lg "charm.land/lipgloss/v2"
@@ -17,14 +18,21 @@ func newNewCommand() *cobra.Command {
 	var force bool
 	var noPDF bool
 	command := &cobra.Command{
-		Use:   "new <query>",
+		Use:   "new <query> [<path>]",
 		Short: "Create a new problem",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			query := args[0]
 			resFunc := resultFunc{
 				single: func(ctx context.Context, session core.SavedSession, problem *core.ProblemLite, reg *core.Registry) error {
-					return cliCreateQuestion(cmd, ctx, session, problem, reg, core.CreateProblemOption{Force: force, NoPDF: noPDF})
+					path, err := os.Getwd()
+					if err != nil {
+						return err
+					}
+					if len(args) > 1 {
+					    path = args[1]
+					}
+					return cliCreateQuestion(cmd, ctx, session, problem, reg, core.CreateProblemOption{Force: force, NoPDF: noPDF, Path: path})
 
 				},
 				multiple: func(cmd *cobra.Command, session core.SavedSession, problems []core.ProblemLite, reg *core.Registry, singleFunc handleSingleProblem) error {

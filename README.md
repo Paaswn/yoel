@@ -36,22 +36,36 @@ Gatekeeper may show a warning; do not disable platform security protections.
 ![fetch](usages/fetch.gif)
 
 ### `yoel list`
-yoel list shows every available grader's problems which can be seleceted interactively
+show a list of every problem which can be seleceted interactively
 
 ![list](usages/list.gif)
 
-### `yoel new <query>`
-create any problem locally, every attachments are downloaded and seamlessly extracted to your working directory 
+### `yoel new <query> [<path>]`
+```
+create a problem locally. Any attachment is downloaded and extracted to CWD or provided path under its own directory, then open the problem's PDF automatically
+
+flags: 
+  [--force|-f] force creating a new problem
+  [--no-pdf] disable opening pdf automatically behavior
+  [--json|-j] format output as json
+```
 ![new](usages/new.gif)
 
 ### `yoel submit <query>`
+```
 submit a problem to the grader. yoel automatically solves which source file to be sent, ( student.h > main.h > main.cpp > *.cpp  )
+
+flags:
+  [--with|w] <source_path> submit a problem to the grader with <source_path>, then overwrite its source path with this one
+  [--dont-set] disable [--with|-w] overwriting source path behavior
+  [--json] format output as json
+```
 ![submit](usages/submit.gif)
 
 
 > [!NOTE]
 >
-> a query could be problem's id, or problem's name
+> a query could be a problem's id, or a problem's name. If yoel matches multiple problems from the name, an interactive list will be shown 
 
 ## Updating
 

@@ -37,9 +37,6 @@ func newSeeCommand() *cobra.Command {
 					for i := 0; i < v.NumField(); i++ {
 						fType := ty.Field(i)
 						fVal := v.Field(i)
-						if fType.Name == "SortOrder" {
-							continue
-						}
 						rows = append(rows, []string{})
 						rows[row] = append(rows[row], fType.Name)
 						rows[row] = append(rows[row], fmt.Sprintf("%v", fVal.Interface()))
